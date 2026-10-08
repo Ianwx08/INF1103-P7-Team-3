@@ -136,3 +136,12 @@ def get_flagged_fields(
             flagged.append(field)
 
     return flagged
+
+def refresh_ai_summary(item_data: dict) -> dict:
+    """Recompute missing_fields and overall_confidence after user corrections."""
+    item_data["missing_fields"] = [
+        field for field in REQUIRED_FIELDS if not _field_value(item_data, field)
+    ]
+    confidences = [_field_confidence(item_data, field) for field in REQUIRED_FIELDS]
+    item_data["overall_confidence"] = round(min(confidences), 2)
+    return item_data
