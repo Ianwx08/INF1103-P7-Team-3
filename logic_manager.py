@@ -117,3 +117,22 @@ def _field_confidence(item_data: dict, field: str) -> float:
     if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
         return 0.0
     return float(confidence)
+
+
+def get_flagged_fields(
+    item_data: dict,
+    threshold: float = LOW_CONFIDENCE_THRESHOLD,
+) -> list[str]:
+    """Required fields that are missing, flagged by the AI, or below threshold."""
+    ai_missing = item_data.get("missing_fields") or []
+    flagged = []
+
+    for field in REQUIRED_FIELDS:
+        if (
+            not _field_value(item_data, field)
+            or field in ai_missing
+            or _field_confidence(item_data, field) < threshold
+        ):
+            flagged.append(field)
+
+    return flagged
