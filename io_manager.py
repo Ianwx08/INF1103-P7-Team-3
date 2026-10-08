@@ -39,6 +39,13 @@ def _valid_color(value):
         and all(word in allowed_words for word in words)
         and any(word in _COLOR_NAMES for word in words)
     )
+def _valid_brand(value):
+    words = value.split()
+    return bool(words) and all(word.isalnum() for word in words)
+
+
+def _valid_unique_description(value):
+    return len(value.split()) <= 80
 
 
 def _prompt_valid(prompt, validator, error_message, optional=False):
@@ -87,8 +94,19 @@ def get_item_description():
         "Invalid color. Use a complete color name with letters, spaces, or single hyphens."
     )
 
-    item_brand = input("Enter the item brand: ").strip()
-    item_description = input("Enter the item unique description: ").strip()
+    item_brand = _prompt_valid(
+        "Enter the item brand (optional; press Enter to skip): ",
+        _valid_brand,
+        "Invalid brand. Use letters, numbers, and spaces only.",
+        optional=True
+    )
+
+    item_description = _prompt_valid(
+        "Enter the item unique description (optional; maximum 80 words): ",
+        _valid_unique_description,
+        "Invalid description. It must be 80 words or fewer.",
+        optional=True
+    )
 
     return item_type, item_color, item_brand, item_description
 
