@@ -6,18 +6,18 @@ def menu():
     print("1. Find a lost item")
     print("2. Report a found item\n")
 
-    user_input = input("Enter your choice (1 or 2): ")
-    
-    if not user_input.isdigit() or int(user_input) not in [1, 2]:
-        print("\nInvalid input. Please enter 1 or 2.\n")
-        return menu()
-    
-    if user_input == "1":
-        print("\nYou selected: Find a lost item\n")
-        return "lost"
-    else:
-        print("\nYou selected: Report a found item\n")
-        return "found"
+    while True:
+        user_input = input("Enter your choice (1 or 2): ").strip()
+
+        if user_input == "1":
+            print("\nYou selected: Find a lost item\n")
+            return "lost"
+
+        if user_input == "2":
+            print("\nYou selected: Report a found item\n")
+            return "found"
+
+        print("Invalid choice. Enter 1 or 2.")
 
 def get_item_description():
     item_type = input("Enter the item type: ")
