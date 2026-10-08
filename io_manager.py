@@ -1,3 +1,5 @@
+from datetime import datetime
+
 _COLOR_NAMES = {
     "black", "white", "red", "blue", "green", "yellow", "orange",
     "purple", "violet", "indigo", "pink", "brown", "grey", "gray",
@@ -59,6 +61,27 @@ def _prompt_valid(prompt, validator, error_message, optional=False):
             return value
 
         print(error_message)
+def _valid_datetime(value):
+    try:
+        parsed = datetime.strptime(value, "%Y-%m-%dT%H:%M")
+        return parsed.strftime("%Y-%m-%dT%H:%M") == value
+    except ValueError:
+        return False
+
+
+def _valid_location(value):
+    words = value.split()
+
+    if not words or len(words) > 30:
+        return False
+
+    if value.startswith("-") or value.endswith("-") or "--" in value:
+        return False
+
+    return all(
+        character.isalnum() or character.isspace() or character == "-"
+        for character in value
+    )
 
 def menu():
     print("===============================")
@@ -111,10 +134,19 @@ def get_item_description():
     return item_type, item_color, item_brand, item_description
 
 def get_datetimelocation():
-    datetime = input("Enter the date and time: ")
-    location = input("Enter the location: ")
+    date_time = _prompt_valid(
+        "Enter the date and time (YYYY-MM-DDTHH:MM): ",
+        _valid_datetime,
+        "Invalid date or time. Use YYYY-MM-DDTHH:MM, for example 2026-10-08T14:30."
+    )
 
-    return datetime, location
+    location = _prompt_valid(
+        "Enter the location (maximum 30 words): ",
+        _valid_location,
+        "Invalid location. Use letters, numbers, spaces, and single hyphens only; enter no more than 30 words."
+    )
+
+    return date_time, location
 
 def invalid_inputs(item_data):
     if not item_data["item_type"]["value"]:
