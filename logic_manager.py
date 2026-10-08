@@ -101,3 +101,19 @@ REQUIRED_FIELDS = (
     "datetime",
     "location",
 )
+
+def _field_value(item_data: dict, field: str) -> str:
+    field_data = item_data.get(field)
+    if not isinstance(field_data, dict) or field_data.get("value") is None:
+        return ""
+    return str(field_data["value"]).strip()
+
+
+def _field_confidence(item_data: dict, field: str) -> float:
+    field_data = item_data.get(field)
+    if not isinstance(field_data, dict):
+        return 0.0
+    confidence = field_data.get("confidence", 0.0)
+    if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
+        return 0.0
+    return float(confidence)
