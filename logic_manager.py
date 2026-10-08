@@ -88,3 +88,16 @@ def get_review_items(
     """Return borderline items that need a secondary check (e.g. staff)."""
     results = evaluate_candidates(scored_items, config)
     return [r for r in results if r.decision is MatchDecision.REVIEW]
+
+# -------------------------
+# AI output evaluation
+# -------------------------
+LOW_CONFIDENCE_THRESHOLD = 0.60
+
+REQUIRED_FIELDS = (
+    "item_description",
+    "item_type",
+    "item_colour",
+    "datetime",
+    "location",
+)
