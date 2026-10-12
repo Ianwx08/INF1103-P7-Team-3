@@ -8,6 +8,37 @@ def clean_text(value):
 BACK_COMMAND = "back"
 
 
+def menu():
+    """Show the main menu and return the user's choice: "lost", "found" or "exit"."""
+    print("===============================")
+    print("Lost and Found Management System")
+    print("===============================\n")
+    print("What are you here for?")
+    print("1. Find a lost item")
+    print("2. Report a found item")
+    print("3. Exit\n")
+
+    while True:
+        user_input = input("Enter your choice (1-3): ").strip()    # raw menu answer
+
+        if user_input == "1":
+            print("\nYou selected: Find a lost item\n")
+            return "lost"
+
+        if user_input == "2":
+            print("\nYou selected: Report a found item\n")
+            return "found"
+
+        if user_input == "3":
+            return "exit"
+
+        print("Invalid choice. Enter 1, 2 or 3.")
+
+def items_not_found():
+    """Tell the user that no stored found item matched their lost item."""
+    print("No matching items found. Please try again later or report a found item.")
+
+
 def word_count_between(minimum: int, maximum: int):
     """Return a check that passes when an answer has between minimum and maximum words."""
     return lambda value: minimum <= len(value.split()) <= maximum
@@ -29,6 +60,73 @@ def prompt_detail(prompt: str, validator, error_message: str) -> str | None:
             return value
 
         print(error_message)
+
+
+def get_report_details(report_type: str) -> dict | None:
+    """Ask for the free-text details that Gemini will structure.
+
+    Asks for a description, when and where, then shows the answers back
+    for confirmation (y = keep, n = re-enter, b = back). Returns
+    {"description", "date_time", "location"}, or None if the user chooses
+    to go back to the main menu.
+    """
+    verb = "lost" if report_type == "lost" else "found"    # used in the question wording
+    print(f"(Type '{BACK_COMMAND}' at any prompt to return to the main menu.)\n")
+
+    while True:
+        description = prompt_detail(
+            f"Describe the item you {verb} (type, colour, brand, unique features): ",
+            word_count_between(2, 80),
+            "Description is too short or too long. Enter 2 to 80 words."
+        )
+        if description is None:
+            return None
+
+        date_time = prompt_detail(
+            f"When was it {verb}? (e.g. 2026-10-08 2.30pm, or 'yesterday afternoon'): ",
+            word_count_between(1, 20),
+            "Please enter a date/time of up to 20 words."
+        )
+        if date_time is None:
+            return None
+
+        location = prompt_detail(
+            f"Where was it {verb}? ",
+            word_count_between(1, 30),
+            "Please enter a location of up to 30 words."
+        )
+        if location is None:
+            return None
+
+        print("\nPlease confirm your details:")
+        print(f"  Description : {description}")
+        print(f"  When        : {date_time}")
+        print(f"  Where       : {location}")
+
+        choice = confirm_details()    # "yes", "retry" or "back"
+        if choice == "yes":
+            return {"description": description, "date_time": date_time, "location": location}
+        if choice == "back":
+            return None
+        print("\nOkay, please re-enter the details.\n")
+
+
+def confirm_details() -> str:
+    """Ask whether the entered details are correct.
+
+    Returns "yes" (keep them), "retry" (re-enter them) or "back" (main menu).
+    """
+    while True:
+        answer = input(
+            "Is this correct? (y = yes, n = re-enter, b = back to main menu): "
+        ).strip().lower()
+        if answer in ("y", "yes"):
+            return "yes"
+        if answer in ("n", "no"):
+            return "retry"
+        if answer in ("b", BACK_COMMAND):
+            return "back"
+        print("Please enter y, n or b.")
 
 
 def confirm(prompt: str) -> bool:
@@ -105,24 +203,6 @@ def _valid_unique_description(value):
     return len(value.split()) <= 80
 
 
-def _prompt_valid(prompt, validator, error_message, optional=False):
-    while True:
-        value = _clean_text(input(prompt))
-
-        if optional and not value:
-            return ""
-
-        if validator(value):
-            return value
-
-        print(error_message)
-def _valid_datetime(value):
-    try:
-        parsed = datetime.strptime(value, "%Y-%m-%dT%H:%M")
-        return parsed.strftime("%Y-%m-%dT%H:%M") == value
-    except ValueError:
-        return False
-
 
 def _valid_location(value):
     words = value.split()
@@ -159,55 +239,7 @@ def _repair_value(value, prompt, validator, error_message, optional=False):
 
         print(error_message)
 
-def menu():
-    print("===============================")
-    print("Lost and Found Management System")
-    print("===============================\n")
-    print("What are you here for?")
-    print("1. Find a lost item")
-    print("2. Report a found item\n")
 
-    while True:
-        user_input = input("Enter your choice (1 or 2): ").strip()
-
-        if user_input == "1":
-            print("\nYou selected: Find a lost item\n")
-            return "lost"
-
-        if user_input == "2":
-            print("\nYou selected: Report a found item\n")
-            return "found"
-
-        print("Invalid choice. Enter 1 or 2.")
-
-def get_item_description():
-    item_type = _prompt_valid(
-        "Enter the item type: ",
-        _valid_words_only,
-        "Invalid item type. Use letters and spaces only."
-    )
-
-    item_color = _prompt_valid(
-        "Enter the item color: ",
-        _valid_color,
-        "Invalid color. Use a complete color name with letters, spaces, or single hyphens."
-    )
-
-    item_brand = _prompt_valid(
-        "Enter the item brand (optional; press Enter to skip): ",
-        _valid_brand,
-        "Invalid brand. Use letters, numbers, and spaces only.",
-        optional=True
-    )
-
-    item_description = _prompt_valid(
-        "Enter the item unique description (optional; maximum 80 words): ",
-        _valid_unique_description,
-        "Invalid description. It must be 80 words or fewer.",
-        optional=True
-    )
-
-    return item_type, item_color, item_brand, item_description
 
 def get_datetimelocation():
     date_time = _prompt_valid(
@@ -289,7 +321,4 @@ def display_matches(top_matches):
     print("Displaying top five matches...\n")
     for lines in top_matches:
         print(lines)
-
-def items_not_found():
-    print("No matching items found. Please try again later or report a found item.")
 
