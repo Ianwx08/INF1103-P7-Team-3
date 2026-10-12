@@ -1,5 +1,64 @@
 from datetime import datetime
 
+def clean_text(value):
+    """Trim an answer and collapse repeated spaces, e.g. "  black   wallet " -> "black wallet"."""
+    return " ".join(value.strip().split())
+
+# Typing this at any detail or follow-up prompt returns to the main menu.
+BACK_COMMAND = "back"
+
+
+def word_count_between(minimum: int, maximum: int):
+    """Return a check that passes when an answer has between minimum and maximum words."""
+    return lambda value: minimum <= len(value.split()) <= maximum
+
+
+def prompt_detail(prompt: str, validator, error_message: str) -> str | None:
+    """Ask a question until the answer passes `validator`.
+
+    Prints `error_message` after each invalid answer. Returns the cleaned
+    answer, or None if the user types 'back'.
+    """
+    while True:
+        value = clean_text(input(prompt))    # the user's cleaned answer
+
+        if value.lower() == BACK_COMMAND:
+            return None
+
+        if validator(value):
+            return value
+
+        print(error_message)
+
+
+def confirm(prompt: str) -> bool:
+    """Ask a yes/no question. Returns True for y/yes and False for n/no."""
+    while True:
+        answer = input(f"{prompt} (y/n): ").strip().lower()
+        if answer in ("y", "yes"):
+            return True
+        if answer in ("n", "no"):
+            return False
+        print("Please enter y or n.")
+
+
+def choose_item(items: list[dict], prompt: str) -> dict | None:
+    """Pick one entry from a numbered list. Returns None if the user enters 0."""
+    while True:
+        answer = input(f"{prompt} (1-{len(items)}, or 0 to cancel): ").strip()
+        if answer == "0":
+            return None
+        if answer.isdigit() and 1 <= int(answer) <= len(items):
+            return items[int(answer) - 1]
+        print("Invalid choice.")
+
+
+def show_message(message: str) -> None:
+    """Print a message. main.py uses this so all screen output stays in this module."""
+    print(message)
+
+
+
 _COLOR_NAMES = {
     "black", "white", "red", "blue", "green", "yellow", "orange",
     "purple", "violet", "indigo", "pink", "brown", "grey", "gray",
@@ -15,10 +74,6 @@ _COLOR_NAMES = {
 _COLOR_MODIFIERS = {
     "light", "dark", "pale", "deep", "bright", "neon",
 }
-
-
-def _clean_text(value):
-    return " ".join(value.strip().split())
 
 
 def _valid_words_only(value):
