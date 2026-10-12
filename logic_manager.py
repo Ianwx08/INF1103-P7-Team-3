@@ -287,3 +287,21 @@ def score_match(reference: dict, candidate: dict, directional: bool = True) -> f
         return 0.0
 
     score = total / weight_used
+
+
+    # Different kinds of item should never rank highly, whatever else matches.
+    type_similarity = text_similarity(
+        field_value(reference, "item_type"),
+        field_value(candidate, "item_type"),
+    )
+    if type_similarity is not None and type_similarity < 0.5:
+        score *= 0.5
+
+    # An item is unlikely to be found long before it was lost.
+    if directional and found_too_early(
+        field_value(reference, "datetime"),
+        field_value(candidate, "datetime"),
+    ):
+        score *= EARLY_FOUND_PENALTY
+
+    return round(min(max(score, 0.0), 1.0), 4)
