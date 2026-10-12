@@ -389,3 +389,62 @@ def ask_for_specific_location(item_data: dict, report_type: str) -> dict | None:
         "Please enter a location of up to 30 words."
     )
     return None if answer is None else {"location": answer}
+
+def choose_colour(colour_options: list[str]) -> str | None:
+    """Ask the user to pick the most noticeable colour from Gemini's options.
+
+    Returns the chosen colour, or None if the user types 'back'.
+    """
+    print("\nMore than one colour was mentioned. Which is the most noticeable colour?")
+    for number, colour in enumerate(colour_options, start=1):
+        print(f"  {number}. {colour}")
+
+    while True:
+        answer = input(
+            f"Enter your choice (1-{len(colour_options)}, or '{BACK_COMMAND}' for main menu): "
+        ).strip()
+        if answer.lower() == BACK_COMMAND:
+            return None
+        if answer.isdigit() and 1 <= int(answer) <= len(colour_options):
+            return colour_options[int(answer) - 1]
+        print("Invalid choice.")
+
+
+def ask_about_flagged_fields(item_data: dict, flagged_fields: list[str], report_type: str) -> dict | None:
+    """Ask follow-up questions for the fields logic_manager flagged.
+
+    If a field already has a value, the user can press Enter to confirm it
+    or type a correction; if it is empty, the question in FIELD_QUESTIONS is
+    asked. Returns {field: free-text answer} for the AI manager to validate
+    and format, or None if the user types 'back'.
+    """
+    verb = "lost" if report_type == "lost" else "found"
+    answers = {}    # field name -> the user's answer, sent to Gemini afterwards
+
+    print(f"\nWe need a few more details (type '{BACK_COMMAND}' for main menu):")
+
+    for field in flagged_fields:
+        field_data = item_data.get(field)
+        current = field_data.get("value") if isinstance(field_data, dict) else None    # Gemini's current value
+        label = FIELD_LABELS[field]
+
+        if current:
+            answer = clean_text(input(
+                f"  We understood the {label} as '{current}'. "
+                f"Press Enter to confirm, or type a correction: "
+            ))
+            if answer.lower() == BACK_COMMAND:
+                return None
+            # An empty answer means "keep it", which Gemini is told explicitly.
+            answers[field] = answer if answer else f"{current} (confirmed by the user)"
+        else:
+            answer = prompt_detail(
+                "  " + FIELD_QUESTIONS[field].format(verb=verb),
+                word_count_between(1, 30),
+                f"Please enter the {label} (up to 30 words)."
+            )
+            if answer is None:
+                return None
+            answers[field] = answer
+
+    return answers
