@@ -155,6 +155,16 @@ def is_vague_location(item_data: dict) -> bool:
     """True if Gemini gave a location but judged it too vague to find."""
     return bool(field_value(item_data, "location")) and item_data.get("location_specific") is False
 
+# Thresholds for lost-item searches: 0.70+ is a top match, 0.50+ a possible match.
+MATCH_CONFIG = {
+    "display_threshold": 0.70,
+    "review_threshold": 0.50,
+    "max_results": 5,
+}
+
+# A new found report scoring this high against a stored one is treated as a likely duplicate.
+DUPLICATE_THRESHOLD = 0.90
+
 # How much each field counts towards a match score (they add up to 1.0).
 MATCH_WEIGHTS = {
     "item_type": 0.25,
@@ -246,3 +256,34 @@ def datetime_similarity(lost_value: str, found_value: str, directional: bool) ->
 
     gap_days = max(abs(gap_hours) / 24 - 1, 0)    # the first day apart is free
     return max(0.0, 1 - gap_days / MAX_DATE_GAP_DAYS)
+
+
+def score_match(reference: dict, candidate: dict, directional: bool = True) -> float:
+    """Weighted similarity between two AI-structured item records, in [0, 1].
+
+    Fields missing on either side are skipped and the weights re-normalised.
+    directional=True treats reference as the lost report and candidate as
+    the found item (used for searches); False compares both ways (duplicates).
+    """
+    total = 0.0          # sum of weight x similarity for fields both items have
+    weight_used = 0.0    # sum of the weights that were actually compared
+
+    for field, weight in MATCH_WEIGHTS.items():
+        first = field_value(reference, field)
+        second = field_value(candidate, field)
+
+        if field == "datetime":
+            similarity = datetime_similarity(first, second, directional)
+        else:
+            similarity = text_similarity(first, second)
+
+        if similarity is None:
+            continue
+
+        total += weight * similarity
+        weight_used += weight
+
+    if weight_used == 0:
+        return 0.0
+
+    score = total / weight_used
