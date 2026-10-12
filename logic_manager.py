@@ -371,3 +371,23 @@ def get_expired_item_ids(
             expired.append(item["item_id"])
 
     return expired
+
+def get_colour_options(item_data: dict) -> list[str]:
+    """Distinct colours Gemini found, in order, ignoring case and blanks."""
+    options = []    # colours kept so far, without duplicates
+    for colour in item_data.get("colour_options") or []:
+        colour = str(colour).strip()
+        if colour and colour.lower() not in [option.lower() for option in options]:
+            options.append(colour)
+    return options
+
+
+def apply_colour_choice(item_data: dict, colour: str) -> dict:
+    """Store the colour the user picked as the item's single, confirmed colour."""
+    item_data["item_colour"] = {"value": colour, "confidence": 1.0}
+    item_data["colour_options"] = [colour]
+    # The colour is no longer missing, so it must not be asked again.
+    item_data["missing_fields"] = [
+        field for field in item_data.get("missing_fields") or [] if field != "item_colour"
+    ]
+    return item_data
