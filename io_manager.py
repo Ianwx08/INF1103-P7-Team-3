@@ -479,3 +479,38 @@ def display_possible_matches(possible_matches):
     print("\nPossible matches (less certain)...\n")
     for lines in possible_matches:    # each entry is one formatted item block
         print(lines)
+
+
+
+
+def show_matches_and_choose(matches: list[dict], possible_matches: list[dict]) -> dict | None:
+    """Show top and possible matches, numbered as one list, and return the chosen found item.
+
+    Returns None if the user cancels with 0.
+    """
+    all_matches = matches + possible_matches    # one list so the numbering runs on
+    lines = [
+        f"{number}. " + format_item(match["item"])
+        for number, match in enumerate(all_matches, start=1)
+    ]
+
+    if matches:
+        display_matches(lines[:len(matches)])
+    if possible_matches:
+        display_possible_matches(lines[len(matches):])
+
+    chosen = choose_item(all_matches, "\nWhich item is yours?")
+    return None if chosen is None else chosen["item"]
+
+
+
+
+def confirm_duplicate(duplicates: list[dict]) -> bool:
+    """Show similar stored items and ask whether to save the new report anyway.
+
+    Returns True if the user still wants to save it.
+    """
+    print("\nThis looks similar to item(s) already reported:")
+    for item in duplicates:
+        print(format_item(item))
+    return confirm("Save as a new report anyway?")
