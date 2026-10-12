@@ -201,3 +201,39 @@ def text_similarity(first: str, second: str) -> float | None:
     sequence = SequenceMatcher(None, " ".join(first_tokens), " ".join(second_tokens)).ratio()
 
     return max(jaccard, 0.9 * overlap, sequence)
+
+def parse_datetime(value: str) -> datetime | None:
+    """Read a "YYYY-MM-DDTHH:MM" string; returns None if it is missing or invalid."""
+    try:
+        return datetime.strptime(value, "%Y-%m-%dT%H:%M")
+    except (TypeError, ValueError):
+        return None
+
+
+def found_too_early(lost_value: str, found_value: str) -> bool:
+    """True if the item was found more than EARLY_FOUND_TOLERANCE_HOURS before it was lost."""
+    lost_time = parse_datetime(lost_value)
+    found_time = parse_datetime(found_value)
+    if lost_time is None or found_time is None:
+        return False
+    gap_hours = (found_time - lost_time).total_seconds() / 3600    # negative = found before lost
+    return gap_hours < -EARLY_FOUND_TOLERANCE_HOURS
+
+
+def datetime_similarity(lost_value: str, found_value: str, directional: bool) -> float | None:
+    """1.0 for the same day, falling to 0 at MAX_DATE_GAP_DAYS apart.
+
+    When directional, an item found well before it was lost scores 0.
+    Returns None if either date is missing.
+    """
+    lost_time = parse_datetime(lost_value)
+    found_time = parse_datetime(found_value)
+    if lost_time is None or found_time is None:
+        return None
+
+    gap_hours = (found_time - lost_time).total_seconds() / 3600
+    if directional and found_too_early(lost_value, found_value):
+        return 0.0
+
+    gap_days = max(abs(gap_hours) / 24 - 1, 0)    # the first day apart is free
+    return max(0.0, 1 - gap_days / MAX_DATE_GAP_DAYS)
