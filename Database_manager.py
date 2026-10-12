@@ -112,3 +112,22 @@ def delete_item(item_id: str) -> bool:
 
     save_items(remaining)
     return True
+
+def update_item(item_id: str, updates: dict) -> bool:
+    """Merge new values into an existing item. Returns True if the item was found."""
+    items = load_items()
+
+    for item in items:
+        if item.get("item_id") == item_id:
+            item.update(updates)
+            save_items(items)
+            return True
+
+    return False
+
+def get_active_items() -> list[dict]:
+    """Return only items whose status is "active" (not archived)."""
+    return [
+        item for item in load_items()
+        if item.get("status", "active") == "active"
+    ]
