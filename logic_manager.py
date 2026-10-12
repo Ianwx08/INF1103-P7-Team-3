@@ -1,39 +1,38 @@
-from dataclasses import dataclass
-from enum import Enum
-from typing import Iterable, List, Tuple
+import re
+from datetime import datetime, timedelta
+from difflib import SequenceMatcher
+from typing import Iterable
  
- 
-class MatchDecision(Enum):
-    """Possible outcomes for a single candidate item."""
-    DISPLAY = "display"   # confident enough to show the user
-    REVIEW = "review"     # borderline; flag for staff / secondary check
-    HIDE = "hide"         # too weak to show
- 
- 
-@dataclass(frozen=True)
-class LogicConfig:
-    """Tunable settings. Placeholder values; adjust once real data exists."""
-    display_threshold: float = 0.80   # >= this -> DISPLAY
-    review_threshold: float = 0.50    # >= this (and < display) -> REVIEW
-    max_results: int = 5              # cap on items shown to the user
- 
-    def __post_init__(self):
-        if not (0.0 <= self.review_threshold <= self.display_threshold <= 1.0):
-            raise ValueError(
-                "Thresholds must satisfy 0 <= review <= display <= 1."
-            )
-        if self.max_results < 1:
-            raise ValueError("max_results must be at least 1.")
- 
- 
-@dataclass(frozen=True)
-class CandidateResult:
-    """A candidate item paired with its decision."""
-    item_id: str
-    confidence: float
-    decision: MatchDecision
- 
- 
+# Possible outcomes for a single candidate item.
+DISPLAY = "display"   # confident enough to show the user
+REVIEW = "review"     # borderline; flag for staff / secondary check
+HIDE = "hide"         # too weak to show
+
+# Tunable settings. Placeholder values; adjust once real data exists.
+DEFAULT_CONFIG = {
+    "display_threshold": 0.80,   # >= this -> DISPLAY
+    "review_threshold": 0.50,    # >= this (and < display) -> REVIEW
+    "max_results": 5,            # cap on items shown to the user
+}
+
+def validate_config(config: dict | None = None) -> dict:
+    """Return a checked config dict (DEFAULT_CONFIG when None).
+
+    Raises ValueError if the thresholds are out of order or max_results < 1.
+    """
+    config = DEFAULT_CONFIG if config is None else config
+    if not (0.0 <= config["review_threshold"] <= config["display_threshold"] <= 1.0):
+        raise ValueError(
+            "Thresholds must satisfy 0 <= review <= display <= 1."
+        )
+    if config["max_results"] < 1:
+        raise ValueError("max_results must be at least 1.")
+    return config
+
+
+
+
+
 def validate_confidence(confidence: float) -> float:
     """Ensure a confidence value is a number in the range [0.0, 1.0]."""
     if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
