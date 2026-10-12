@@ -174,3 +174,30 @@ _WORD_SYNONYMS = {
 MAX_DATE_GAP_DAYS = 7               # date weightage falls to 0 past 7 days
 EARLY_FOUND_TOLERANCE_HOURS = 48    # "found before lost" is allowed up to 48 hours
 EARLY_FOUND_PENALTY = 0.8           # score multiplier when found long before it was lost
+
+def tokens(text: str) -> list[str]:
+    """Split text into lower-case words and replace synonyms, e.g. "Gray Mobile" -> ["grey", "phone"]."""
+    words = re.findall(r"[a-z0-9]+", text.lower())
+    return [_WORD_SYNONYMS.get(word, word) for word in words]
+
+
+def text_similarity(first: str, second: str) -> float | None:
+    """Similarity of two texts in [0, 1]; None when either side is empty.
+
+    Takes the best of three measures: shared words out of all words
+    (Jaccard), shared words out of the shorter text (overlap), and
+    character-level similarity (SequenceMatcher).
+    """
+    first_tokens = tokens(first)
+    second_tokens = tokens(second)
+    if not first_tokens or not second_tokens:
+        return None
+
+    first_set = set(first_tokens)
+    second_set = set(second_tokens)
+    shared = len(first_set & second_set)    # number of words in both texts
+    jaccard = shared / len(first_set | second_set)
+    overlap = shared / min(len(first_set), len(second_set))
+    sequence = SequenceMatcher(None, " ".join(first_tokens), " ".join(second_tokens)).ratio()
+
+    return max(jaccard, 0.9 * overlap, sequence)
