@@ -322,3 +322,70 @@ def display_matches(top_matches):
     for lines in top_matches:
         print(lines)
 
+# Friendly names for each field, used in follow-up questions.
+FIELD_LABELS = {
+    "item_description": "item description",
+    "item_type": "item type",
+    "item_colour": "colour",
+    "item_brand": "brand",
+    "item_unique_info": "unique features",
+    "datetime": "date and time",
+    "location": "location",
+}
+
+# The question asked when a required field is missing.
+# {verb} is replaced with "lost" or "found".
+FIELD_QUESTIONS = {
+    "item_description": "Please describe the item (e.g. Samsung Galaxy S25): ",
+    "item_type": "What kind of item is it (e.g. phone, wallet, bottle)? ",
+    "item_colour": "What colour is it? ",
+    "datetime": "When was it {verb}? (e.g. 'yesterday 3pm', '8 Oct around noon'): ",
+    "location": "Where was it {verb}? ",
+}
+
+
+# Messages shown when Gemini rejects the item type, keyed by the reason
+# returned from logic_manager.get_item_rejection().
+ITEM_TYPE_REJECTIONS = {
+    "prohibited": (
+        "Sorry, living things (people, animals, plants) and food, drinks or fruit "
+        "cannot be reported here."
+    ),
+    "unrecognised": "Sorry, we could not recognise that as an item.",
+}
+
+
+def ask_for_item_type(report_type: str, reason: str = "prohibited") -> dict | None:
+    """Re-prompt for the item type after Gemini rejected it.
+
+    reason is "prohibited" (living thing / food) or "unrecognised" (not a
+    real object). Returns {"item_type": answer}, or None if the user types
+    'back'.
+    """
+    action = "lose" if report_type == "lost" else "find"    # used in the question wording
+    print("\n" + ITEM_TYPE_REJECTIONS[reason])
+    answer = prompt_detail(
+        f"  What kind of item did you {action}? (e.g. phone, wallet, bottle; "
+        f"'{BACK_COMMAND}' for main menu): ",
+        word_count_between(1, 30),
+        "Please enter the item type (up to 30 words)."
+    )
+    return None if answer is None else {"item_type": answer}
+
+
+def ask_for_specific_location(item_data: dict, report_type: str) -> dict | None:
+    """Re-prompt when Gemini judged the location too vague to find.
+
+    Pressing Enter cannot skip it. Returns {"location": answer}, or None
+    if the user types 'back'.
+    """
+    verb = "lost" if report_type == "lost" else "found"
+    current = item_data["location"]["value"]    # the vague place the user gave
+    print(f"\n'{current}' is too vague for someone else to find.")
+    answer = prompt_detail(
+        f"  Where exactly was it {verb}? (e.g. building and level, mall, MRT station, "
+        f"street name; '{BACK_COMMAND}' for main menu): ",
+        word_count_between(1, 30),
+        "Please enter a location of up to 30 words."
+    )
+    return None if answer is None else {"location": answer}
