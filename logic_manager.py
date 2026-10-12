@@ -91,8 +91,11 @@ def get_review_items(
 # -------------------------
 # AI output evaluation
 # -------------------------
-LOW_CONFIDENCE_THRESHOLD = 0.60
+LOW_CONFIDENCE_THRESHOLD = 0.60   # fields Gemini is less sure about than this are re-asked
+MAX_FOLLOW_UP_ROUNDS = 3   # stop re-asking after this many rounds
 
+# Fields that must have a value before a report is accepted.
+# item_brand and item_unique_info are optional.
 REQUIRED_FIELDS = (
     "item_description",
     "item_type",
@@ -101,14 +104,15 @@ REQUIRED_FIELDS = (
     "location",
 )
 
-def _field_value(item_data: dict, field: str) -> str:
-    field_data = item_data.get(field)
+def field_value(item_data: dict, field: str) -> str:
+    """Return a field's value as trimmed text, or "" if it is missing or null."""
+    field_data = item_data.get(field)    # expected shape: {"value": ..., "confidence": ...}
     if not isinstance(field_data, dict) or field_data.get("value") is None:
         return ""
     return str(field_data["value"]).strip()
 
-
-def _field_confidence(item_data: dict, field: str) -> float:
+def field_confidence(item_data: dict, field: str) -> float:
+    """Return a field's confidence, or 0.0 if it is missing or not a number."""
     field_data = item_data.get(field)
     if not isinstance(field_data, dict):
         return 0.0
