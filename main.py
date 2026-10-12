@@ -10,15 +10,15 @@ if not os.getenv("GEMINI_API_KEY"):
     sys.exit(1)
 
 import ai_manager
-import Database_manager
+import database_manager
 import io_manager
 import logic_manager
 
 
 def archive_expired_items() -> None:
     """Archive found items left unclaimed past the archive period (7 days)."""
-    for item_id in logic_manager.get_expired_item_ids(Database_manager.get_all_items()):
-        Database_manager.update_item(item_id, {"status": "archived"})
+    for item_id in logic_manager.get_expired_item_ids(database_manager.get_all_items()):
+        database_manager.update_item(item_id, {"status": "archived"})
 
 def process_report(report_type: str) -> dict | None:
     """Collect free-text input and let Gemini extract, validate and format it.
@@ -89,3 +89,28 @@ def process_report(report_type: str) -> dict | None:
 
         io_manager.show_message("\nUpdating your report with AI...")
         item_data = ai_manager.analyse_user_input(report_type, answers, item_data)
+
+
+def handle_lost_item() -> None:
+    """Menu option 1: build a lost report, show matching found items and let the user claim one."""
+    lost_data = process_report("lost")    # the lost report; never saved
+    if lost_data is None:
+        return
+
+    results = logic_manager.find_matches(lost_data, database_manager.get_active_items())
+    matches = results["matches"]                     # confident matches
+    possible_matches = results["possible_matches"]   # less certain matches
+    if not matches and not possible_matches:
+        io_manager.items_not_found()
+        return
+
+    chosen = io_manager.show_matches_and_choose(matches, possible_matches)    # the found item picked
+    if chosen is None:
+        return
+
+    io_manager.show_message("\n" + io_manager.format_item(chosen))
+    if io_manager.confirm("Confirm this is your item and claim it?"):
+        database_manager.delete_item(chosen["item_id"])
+        io_manager.show_message(
+            f"Claimed. Quote reference {chosen['item_id']} at the Lost & Found counter."
+        )
