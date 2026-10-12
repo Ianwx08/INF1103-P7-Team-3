@@ -322,3 +322,195 @@ def display_matches(top_matches):
     for lines in top_matches:
         print(lines)
 
+# Friendly names for each field, used in follow-up questions.
+FIELD_LABELS = {
+    "item_description": "item description",
+    "item_type": "item type",
+    "item_colour": "colour",
+    "item_brand": "brand",
+    "item_unique_info": "unique features",
+    "datetime": "date and time",
+    "location": "location",
+}
+
+# The question asked when a required field is missing.
+# {verb} is replaced with "lost" or "found".
+FIELD_QUESTIONS = {
+    "item_description": "Please describe the item (e.g. Samsung Galaxy S25): ",
+    "item_type": "What kind of item is it (e.g. phone, wallet, bottle)? ",
+    "item_colour": "What colour is it? ",
+    "datetime": "When was it {verb}? (e.g. 'yesterday 3pm', '8 Oct around noon'): ",
+    "location": "Where was it {verb}? ",
+}
+
+
+# Messages shown when Gemini rejects the item type, keyed by the reason
+# returned from logic_manager.get_item_rejection().
+ITEM_TYPE_REJECTIONS = {
+    "prohibited": (
+        "Sorry, living things (people, animals, plants) and food, drinks or fruit "
+        "cannot be reported here."
+    ),
+    "unrecognised": "Sorry, we could not recognise that as an item.",
+}
+
+
+def ask_for_item_type(report_type: str, reason: str = "prohibited") -> dict | None:
+    """Re-prompt for the item type after Gemini rejected it.
+
+    reason is "prohibited" (living thing / food) or "unrecognised" (not a
+    real object). Returns {"item_type": answer}, or None if the user types
+    'back'.
+    """
+    action = "lose" if report_type == "lost" else "find"    # used in the question wording
+    print("\n" + ITEM_TYPE_REJECTIONS[reason])
+    answer = prompt_detail(
+        f"  What kind of item did you {action}? (e.g. phone, wallet, bottle; "
+        f"'{BACK_COMMAND}' for main menu): ",
+        word_count_between(1, 30),
+        "Please enter the item type (up to 30 words)."
+    )
+    return None if answer is None else {"item_type": answer}
+
+
+def ask_for_specific_location(item_data: dict, report_type: str) -> dict | None:
+    """Re-prompt when Gemini judged the location too vague to find.
+
+    Pressing Enter cannot skip it. Returns {"location": answer}, or None
+    if the user types 'back'.
+    """
+    verb = "lost" if report_type == "lost" else "found"
+    current = item_data["location"]["value"]    # the vague place the user gave
+    print(f"\n'{current}' is too vague for someone else to find.")
+    answer = prompt_detail(
+        f"  Where exactly was it {verb}? (e.g. building and level, mall, MRT station, "
+        f"street name; '{BACK_COMMAND}' for main menu): ",
+        word_count_between(1, 30),
+        "Please enter a location of up to 30 words."
+    )
+    return None if answer is None else {"location": answer}
+
+def choose_colour(colour_options: list[str]) -> str | None:
+    """Ask the user to pick the most noticeable colour from Gemini's options.
+
+    Returns the chosen colour, or None if the user types 'back'.
+    """
+    print("\nMore than one colour was mentioned. Which is the most noticeable colour?")
+    for number, colour in enumerate(colour_options, start=1):
+        print(f"  {number}. {colour}")
+
+    while True:
+        answer = input(
+            f"Enter your choice (1-{len(colour_options)}, or '{BACK_COMMAND}' for main menu): "
+        ).strip()
+        if answer.lower() == BACK_COMMAND:
+            return None
+        if answer.isdigit() and 1 <= int(answer) <= len(colour_options):
+            return colour_options[int(answer) - 1]
+        print("Invalid choice.")
+
+
+def ask_about_flagged_fields(item_data: dict, flagged_fields: list[str], report_type: str) -> dict | None:
+    """Ask follow-up questions for the fields logic_manager flagged.
+
+    If a field already has a value, the user can press Enter to confirm it
+    or type a correction; if it is empty, the question in FIELD_QUESTIONS is
+    asked. Returns {field: free-text answer} for the AI manager to validate
+    and format, or None if the user types 'back'.
+    """
+    verb = "lost" if report_type == "lost" else "found"
+    answers = {}    # field name -> the user's answer, sent to Gemini afterwards
+
+    print(f"\nWe need a few more details (type '{BACK_COMMAND}' for main menu):")
+
+    for field in flagged_fields:
+        field_data = item_data.get(field)
+        current = field_data.get("value") if isinstance(field_data, dict) else None    # Gemini's current value
+        label = FIELD_LABELS[field]
+
+        if current:
+            answer = clean_text(input(
+                f"  We understood the {label} as '{current}'. "
+                f"Press Enter to confirm, or type a correction: "
+            ))
+            if answer.lower() == BACK_COMMAND:
+                return None
+            # An empty answer means "keep it", which Gemini is told explicitly.
+            answers[field] = answer if answer else f"{current} (confirmed by the user)"
+        else:
+            answer = prompt_detail(
+                "  " + FIELD_QUESTIONS[field].format(verb=verb),
+                word_count_between(1, 30),
+                f"Please enter the {label} (up to 30 words)."
+            )
+            if answer is None:
+                return None
+            answers[field] = answer
+
+    return answers
+
+
+
+
+
+
+def format_item(item: dict) -> str:
+    """Turn one item dictionary into the 4-line block shown to users.
+
+    Missing values are shown as "-".
+    """
+    def value(field):
+        """Return a field's value, or "-" if it is empty or missing."""
+        field_data = item.get(field)
+        if isinstance(field_data, dict) and field_data.get("value"):
+            return field_data["value"]
+        return "-"
+
+    return "\n".join([
+        f"[{item.get('item_id', 'NEW')}] {value('item_description')}",
+        f"    Type: {value('item_type')} | Colour: {value('item_colour')} | Brand: {value('item_brand')}",
+        f"    Unique features: {value('item_unique_info')}",
+        f"    When: {value('datetime')} | Where: {value('location')}",
+    ])
+
+
+def display_possible_matches(possible_matches):
+    """Print the heading and the already-formatted lines for the less certain matches."""
+    print("\nPossible matches (less certain)...\n")
+    for lines in possible_matches:    # each entry is one formatted item block
+        print(lines)
+
+
+
+
+def show_matches_and_choose(matches: list[dict], possible_matches: list[dict]) -> dict | None:
+    """Show top and possible matches, numbered as one list, and return the chosen found item.
+
+    Returns None if the user cancels with 0.
+    """
+    all_matches = matches + possible_matches    # one list so the numbering runs on
+    lines = [
+        f"{number}. " + format_item(match["item"])
+        for number, match in enumerate(all_matches, start=1)
+    ]
+
+    if matches:
+        display_matches(lines[:len(matches)])
+    if possible_matches:
+        display_possible_matches(lines[len(matches):])
+
+    chosen = choose_item(all_matches, "\nWhich item is yours?")
+    return None if chosen is None else chosen["item"]
+
+
+
+
+def confirm_duplicate(duplicates: list[dict]) -> bool:
+    """Show similar stored items and ask whether to save the new report anyway.
+
+    Returns True if the user still wants to save it.
+    """
+    print("\nThis looks similar to item(s) already reported:")
+    for item in duplicates:
+        print(format_item(item))
+    return confirm("Save as a new report anyway?")
