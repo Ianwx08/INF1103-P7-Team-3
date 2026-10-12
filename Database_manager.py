@@ -83,3 +83,32 @@ def generate_item_id() -> str:
             highest = max(highest, int(suffix))
 
     return f"{ID_PREFIX}{highest + 1:04d}"
+
+def add_item(item: dict) -> dict:
+    """Save a new found item and return it as stored.
+
+    Fills in item_id, reported_at (now) and status ("active") if they
+    are missing.
+    """
+    items = load_items()
+    stored_item = dict(item)    # copy, so the caller's dict is not changed
+
+    if not stored_item.get("item_id"):
+        stored_item["item_id"] = generate_item_id()
+    stored_item.setdefault("reported_at", datetime.now().strftime("%Y-%m-%dT%H:%M"))
+    stored_item.setdefault("status", "active")
+
+    items.append(stored_item)
+    save_items(items)
+    return stored_item
+
+def delete_item(item_id: str) -> bool:
+    """Remove an item by ID. Returns True if something was deleted."""
+    items = load_items()
+    remaining = [item for item in items if item.get("item_id") != item_id]    # everything except that ID
+
+    if len(remaining) == len(items):    # nothing was removed, so the ID was not found
+        return False
+
+    save_items(remaining)
+    return True
