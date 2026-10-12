@@ -448,3 +448,34 @@ def ask_about_flagged_fields(item_data: dict, flagged_fields: list[str], report_
             answers[field] = answer
 
     return answers
+
+
+
+
+
+
+def format_item(item: dict) -> str:
+    """Turn one item dictionary into the 4-line block shown to users.
+
+    Missing values are shown as "-".
+    """
+    def value(field):
+        """Return a field's value, or "-" if it is empty or missing."""
+        field_data = item.get(field)
+        if isinstance(field_data, dict) and field_data.get("value"):
+            return field_data["value"]
+        return "-"
+
+    return "\n".join([
+        f"[{item.get('item_id', 'NEW')}] {value('item_description')}",
+        f"    Type: {value('item_type')} | Colour: {value('item_colour')} | Brand: {value('item_brand')}",
+        f"    Unique features: {value('item_unique_info')}",
+        f"    When: {value('datetime')} | Where: {value('location')}",
+    ])
+
+
+def display_possible_matches(possible_matches):
+    """Print the heading and the already-formatted lines for the less certain matches."""
+    print("\nPossible matches (less certain)...\n")
+    for lines in possible_matches:    # each entry is one formatted item block
+        print(lines)
