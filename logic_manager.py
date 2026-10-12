@@ -305,3 +305,46 @@ def score_match(reference: dict, candidate: dict, directional: bool = True) -> f
         score *= EARLY_FOUND_PENALTY
 
     return round(min(max(score, 0.0), 1.0), 4)
+
+
+
+def find_matches(
+    lost_data: dict,
+    found_items: list[dict],
+    config: dict | None = None,
+) -> dict:
+    """Score found items against a lost report.
+
+    Returns {"matches": [...DISPLAY...], "possible_matches": [...REVIEW...]},
+    each list holding up to max_results dicts:
+    {"item_id": str, "confidence": float, "decision": str, "item": found_item}.
+    """
+    config = MATCH_CONFIG if config is None else config
+    items_by_id = {item["item_id"]: item for item in found_items if item.get("item_id")}    # ID -> found item
+    scored = [    # (item_id, match score) pairs for the decision engine
+        (item_id, score_match(lost_data, item))
+        for item_id, item in items_by_id.items()
+    ]
+
+    def attach_items(results: list[dict]) -> list[dict]:
+        """Add the full found item to each decision result so it can be displayed."""
+        return [{**result, "item": items_by_id[result["item_id"]]} for result in results]
+
+    return {
+        "matches": attach_items(get_displayable_items(scored, config)),
+        "possible_matches": attach_items(
+            get_review_items(scored, config)[: config["max_results"]]
+        ),
+    }
+
+
+def find_duplicates(
+    new_item: dict,
+    existing_items: list[dict],
+    threshold: float = DUPLICATE_THRESHOLD,
+) -> list[dict]:
+    """Existing found items that look like the same report as new_item."""
+    return [
+        item for item in existing_items
+        if score_match(new_item, item, directional=False) >= threshold
+    ]
