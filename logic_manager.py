@@ -348,3 +348,26 @@ def find_duplicates(
         item for item in existing_items
         if score_match(new_item, item, directional=False) >= threshold
     ]
+
+
+ARCHIVE_AFTER_DAYS = 7   # found items older than this stop appearing in searches
+
+
+def get_expired_item_ids(
+    items: list[dict],
+    days: int = ARCHIVE_AFTER_DAYS,
+    now: datetime | None = None,
+) -> list[str]:
+    """IDs of active items reported more than `days` ago. Does not change any data."""
+    now = datetime.now() if now is None else now
+    cutoff = now - timedelta(days=days)    # anything reported before this has expired
+    expired = []
+
+    for item in items:
+        if item.get("status", "active") != "active":
+            continue
+        reported_at = parse_datetime(item.get("reported_at", ""))
+        if reported_at is not None and reported_at < cutoff:
+            expired.append(item["item_id"])
+
+    return expired
