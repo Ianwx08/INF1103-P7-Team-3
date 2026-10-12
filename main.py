@@ -1,41 +1,21 @@
+import os
+import sys
+from dotenv import load_dotenv
+
+load_dotenv()    # read GEMINI_API_KEY (and optional GEMINI_MODEL, DATA_DIR) from .env
+
+# The app cannot work without Gemini, so stop straight away if there is no key.
+if not os.getenv("GEMINI_API_KEY"):
+    print("GEMINI_API_KEY is not set. Copy .env.example to .env and add your key.")
+    sys.exit(1)
+
+import ai_manager
+import Database_manager
 import io_manager
+import logic_manager
 
-# menu_selection = io_manager.menu() #output: "lost" or "found"
-# item_type, item_color, item_brand, item_description = io_manager.get_item_description()
-# item_datetime, item_location = io_manager.get_datetimelocation()
 
-#sample invalid input data for testing
-input_data = {
-"report_type": "lost",
-"item_description": {
-"value": "Samsung Galaxy S25",
-"confidence": 1.0
-},
-"item_type": {
-"value": "phone",
-"confidence": 1.0
-},
-"item_colour": {
-"value": None,
-"confidence": 1.0
-},
-"item_brand": {
-"value": "Samsung",
-"confidence": 1.0
-},
-"item_unique_info": {
-"value": None,
-"confidence": 0.0
-},
-"datetime": {
-"value": "2026-10-01T15:30",
-"confidence": 1.0
-},
-"location": {
-"value": "SIT Punggol food court",
-"confidence": 1.0
-}
-}
-
-updated_item_data = io_manager.invalid_inputs(input_data)
-print(updated_item_data)
+def archive_expired_items() -> None:
+    """Archive found items left unclaimed past the archive period (7 days)."""
+    for item_id in logic_manager.get_expired_item_ids(Database_manager.get_all_items()):
+        Database_manager.update_item(item_id, {"status": "archived"})
