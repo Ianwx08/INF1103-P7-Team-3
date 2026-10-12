@@ -321,3 +321,81 @@ def extract_item_information(user_input: str) -> dict:
     if problems:
         raise ValueError("Invalid AI response: " + "; ".join(problems))
     return data
+
+def describe_ai_error(error: Exception) -> str:
+    """Turn a Gemini / network / response error into a plain message for the user."""
+    if isinstance(error, errors.APIError):
+        code = getattr(error, "code", None)    # HTTP status code from Gemini
+        if code == 400 and "api key" in str(error).lower():
+            return "Your Gemini API key is not valid. Check GEMINI_API_KEY in your .env file."
+        if code in (401, 403):
+            return "Gemini refused access. Check that your API key is valid and allowed to use this model."
+        if code == 404:
+            return "The AI model could not be found. Check GEMINI_MODEL in your .env file."
+        if code == 429:
+            return "Too many requests to Gemini. Please wait a minute and try again."
+        if isinstance(code, int) and code >= 500:
+            return "Gemini is busy or temporarily unavailable."
+        return f"Gemini returned an error (code {code})."
+    if isinstance(error, httpx.TimeoutException):
+        return "Gemini took too long to respond."
+    if isinstance(error, httpx.HTTPError):
+        return "Could not connect to Gemini. Check your internet connection."
+    return "Gemini's reply was not in the expected format."
+
+def extract_with_retry(user_input: str, attempts: int = 3) -> dict | None:
+    """Call Gemini until a valid response arrives. Returns None if all attempts fail.
+
+    Prints a plain reason after each failed attempt.
+    """
+    for attempt in range(1, attempts + 1):
+        try:
+            return extract_item_information(user_input)
+        except (ValueError, TypeError, errors.APIError, httpx.HTTPError) as error:
+            print(f"AI processing attempt {attempt}/{attempts} failed: {describe_ai_error(error)}")
+    return None
+
+def analyse_user_input(
+    report_type: str,
+    user_answers: dict,
+    previous_data: dict | None = None,
+) -> dict | None:
+    """Single entry point for all user input: Gemini extracts, validates and
+    formats the information, then the response is schema-checked.
+
+    First call: user_answers = {"description", "date_time", "location"}.
+    Follow-up call: user_answers = {field_name: free-text answer} together
+    with previous_data, so Gemini can update just those fields.
+    """
+    if previous_data is None:
+        prompt = build_item_prompt(
+            report_type,
+            user_answers["description"],
+            user_answers["date_time"],
+            user_answers["location"],
+        )
+    else:
+        today = datetime.now().strftime("%Y-%m-%dT%H:%M (%A)")
+        answer_lines = "\n".join(
+            f"- {field}: {answer}" for field, answer in user_answers.items()
+        )
+        prompt = (
+            f"Current date and time: {today}. {_DATE_RULES}\n"
+            f"Report type: {report_type}\n"
+            f"This report was already extracted as:\n"
+            f"{json.dumps(previous_data, ensure_ascii=False)}\n"
+            f"The user has now answered follow-up questions about these fields:\n"
+            f"{answer_lines}\n"
+            f"Update those fields from the user's answers. Information the user "
+            f"states or confirms directly is explicit. If an answer contains no "
+            f"usable information for its field, set that value to null. If the "
+            f"item type changes, update item_description to match. Keep all "
+            f"other fields unchanged, then re-evaluate colour_options, "
+            f"prohibited_item, item_recognised and location_specific and "
+            f"recompute missing_fields and overall_confidence."
+        )
+
+    data = extract_with_retry(prompt)    # check reply, else none if gemini failed
+    if data is not None:
+        data["report_type"] = report_type
+    return data

@@ -1,3 +1,4 @@
+import json
 from ai_manager import extract_item_information
 
 
@@ -25,7 +26,8 @@ for test_input in test_inputs:
         print("\nAI OUTPUT:")
 
         print(
-            result.model_dump_json(
+            json.dumps(
+                result,
                 indent=4
             )
         )
