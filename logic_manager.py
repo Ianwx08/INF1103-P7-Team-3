@@ -28,65 +28,65 @@ def validate_config(config: dict | None = None) -> dict:
     if config["max_results"] < 1:
         raise ValueError("max_results must be at least 1.")
     return config
-
-
-
-
+# A candidate result is a dict:
+# {"item_id": str, "confidence": float, "decision": DISPLAY | REVIEW | HIDE}
 
 def validate_confidence(confidence: float) -> float:
-    """Ensure a confidence value is a number in the range [0.0, 1.0]."""
+    """Ensure a confidence value is a number in the range [0.0, 1.0] and return it as a float."""
     if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
         raise TypeError("Confidence must be a number.")
     if not (0.0 <= confidence <= 1.0):
         raise ValueError(f"Confidence {confidence} is outside [0.0, 1.0].")
     return float(confidence)
  
- 
-def decide(confidence: float, config: LogicConfig = LogicConfig()) -> MatchDecision:
-    """Decide what to do with one confidence score."""
+def decide(confidence: float, config: dict | None = None) -> str:
+    """Decide what to do with one confidence score: DISPLAY, REVIEW or HIDE."""
+    config = validate_config(config)
     confidence = validate_confidence(confidence)
-    if confidence >= config.display_threshold:
-        return MatchDecision.DISPLAY
-    if confidence >= config.review_threshold:
-        return MatchDecision.REVIEW
-    return MatchDecision.HIDE
- 
+    if confidence >= config["display_threshold"]:
+        return DISPLAY
+    if confidence >= config["review_threshold"]:
+        return REVIEW
+    return HIDE
  
 def evaluate_candidates(
-    scored_items: Iterable[Tuple[str, float]],
-    config: LogicConfig = LogicConfig(),
-) -> List[CandidateResult]:
+    scored_items: Iterable[tuple[str, float]],
+    config: dict | None = None,
+) -> list[dict]:
     """
     Evaluate many (item_id, confidence) pairs.
- 
+
     Returns every candidate with its decision, sorted by confidence (highest
     first). Items the user should see are those with decision == DISPLAY,
-    limited to config.max_results by get_displayable_items().
+    limited to config["max_results"] by get_displayable_items().
     """
     results = [
-        CandidateResult(item_id, validate_confidence(conf), decide(conf, config))
+        {
+            "item_id": item_id,
+            "confidence": validate_confidence(conf),
+            "decision": decide(conf, config),
+        }
         for item_id, conf in scored_items
     ]
-    return sorted(results, key=lambda r: r.confidence, reverse=True)
- 
- 
+    return sorted(results, key=lambda r: r["confidence"], reverse=True)
+
 def get_displayable_items(
-    scored_items: Iterable[Tuple[str, float]],
-    config: LogicConfig = LogicConfig(),
-) -> List[CandidateResult]:
-    """Return only the items that should be shown to the claimant."""
+    scored_items: Iterable[tuple[str, float]],
+    config: dict | None = None,
+) -> list[dict]:
+    """Return only the items that should be shown to the claimant (at most max_results)."""
+    config = validate_config(config)
     results = evaluate_candidates(scored_items, config)
-    displayable = [r for r in results if r.decision is MatchDecision.DISPLAY]
-    return displayable[: config.max_results]
- 
+    displayable = [r for r in results if r["decision"] == DISPLAY]
+    return displayable[: config["max_results"]]
  
 def get_review_items(
-    scored_items: Iterable[Tuple[str, float]],
-    config: LogicConfig = LogicConfig(),
-) -> List[CandidateResult]:
-    """Return borderline items that need a secondary check (e.g. staff)."""
+    scored_items: Iterable[tuple[str, float]],
+    config: dict | None = None,
+) -> list[dict]:
+    """Return borderline items that need a secondary check; shown as "possible matches"."""
     results = evaluate_candidates(scored_items, config)
-    return [r for r in results if r.decision is MatchDecision.REVIEW]
+    return [r for r in results if r["decision"] == REVIEW]
 
 # -------------------------
 # AI output evaluation
