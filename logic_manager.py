@@ -144,3 +144,33 @@ def refresh_ai_summary(item_data: dict) -> dict:
     confidences = [_field_confidence(item_data, field) for field in REQUIRED_FIELDS]
     item_data["overall_confidence"] = round(min(confidences), 2)
     return item_data
+
+
+# How much each field counts towards a match score (they add up to 1.0).
+MATCH_WEIGHTS = {
+    "item_type": 0.25,
+    "item_colour": 0.20,
+    "item_description": 0.15,
+    "location": 0.15,
+    "item_brand": 0.10,
+    "datetime": 0.10,
+    "item_unique_info": 0.05,
+}
+
+# Words that mean the same thing, mapped to one form before comparing text.
+_WORD_SYNONYMS = {
+    "gray": "grey",
+    "colour": "color",
+    "handphone": "phone",
+    "mobile": "phone",
+    "smartphone": "phone",
+    "earbuds": "earphones",
+    "earpods": "earphones",
+    "headphone": "headphones",
+    "notebook": "laptop",
+    "purse": "wallet",
+}
+
+MAX_DATE_GAP_DAYS = 7               # date weightage falls to 0 past 7 days
+EARLY_FOUND_TOLERANCE_HOURS = 48    # "found before lost" is allowed up to 48 hours
+EARLY_FOUND_PENALTY = 0.8           # score multiplier when found long before it was lost
