@@ -28,4 +28,3 @@ def backup_corrupt_file() -> None:
     backup_path = f"{FOUND_ITEMS_FILE}.corrupt-{timestamp}"
     os.replace(FOUND_ITEMS_FILE, backup_path)
     print(f"Warning: found items file was unreadable. Backed up to {backup_path}")
-
