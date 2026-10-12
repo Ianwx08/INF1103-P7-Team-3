@@ -121,34 +121,39 @@ def field_confidence(item_data: dict, field: str) -> float:
         return 0.0
     return float(confidence)
 
-
 def get_flagged_fields(
     item_data: dict,
     threshold: float = LOW_CONFIDENCE_THRESHOLD,
 ) -> list[str]:
-    """Required fields that are missing, flagged by the AI, or below threshold."""
-    ai_missing = item_data.get("missing_fields") or []
-    flagged = []
+    """Required fields that are empty, listed as missing by Gemini, or below the threshold."""
+    ai_missing = item_data.get("missing_fields") or []    # fields Gemini says it could not extract
+    flagged = []    # fields that need a follow-up question
 
     for field in REQUIRED_FIELDS:
         if (
-            not _field_value(item_data, field)
+            not field_value(item_data, field)
             or field in ai_missing
-            or _field_confidence(item_data, field) < threshold
+            or field_confidence(item_data, field) < threshold
         ):
             flagged.append(field)
 
     return flagged
 
-def refresh_ai_summary(item_data: dict) -> dict:
-    """Recompute missing_fields and overall_confidence after user corrections."""
-    item_data["missing_fields"] = [
-        field for field in REQUIRED_FIELDS if not _field_value(item_data, field)
-    ]
-    confidences = [_field_confidence(item_data, field) for field in REQUIRED_FIELDS]
-    item_data["overall_confidence"] = round(min(confidences), 2)
-    return item_data
+def is_prohibited_item(item_data: dict) -> bool:
+    """True if Gemini judged the item to be a living thing or food/drink/fruit."""
+    return item_data.get("prohibited_item") is True
 
+def get_item_rejection(item_data: dict) -> str | None:
+    """Why the item type must be re-asked: "prohibited", "unrecognised", or None if it is fine."""
+    if is_prohibited_item(item_data):
+        return "prohibited"
+    if item_data.get("item_recognised") is False:
+        return "unrecognised"
+    return None
+
+def is_vague_location(item_data: dict) -> bool:
+    """True if Gemini gave a location but judged it too vague to find."""
+    return bool(field_value(item_data, "location")) and item_data.get("location_specific") is False
 
 # How much each field counts towards a match score (they add up to 1.0).
 MATCH_WEIGHTS = {
