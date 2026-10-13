@@ -1,0 +1,21 @@
+# API keys and environment files
+.env
+.env.*
+
+# Local data must not enter the image
+data/
+
+# Python cache
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+
+# Git repository metadata
+.git/
+.gitignore
+
+# Backup folders and files
+backup_*/
+**/backup_*/
+*.corrupt-*
