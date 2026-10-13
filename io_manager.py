@@ -208,6 +208,24 @@ def ask_for_specific_location(item_data: dict, report_type: str) -> dict | None:
     return None if answer is None else {"location": answer}
 
 
+def ask_for_past_datetime(item_data: dict, report_type: str) -> dict | None:
+    """Re-prompt when the date/time Gemini worked out is in the future.
+
+    Pressing Enter cannot skip it. Returns {"datetime": answer}, or None
+    if the user types 'back'.
+    """
+    verb = "lost" if report_type == "lost" else "found"
+    current = item_data["datetime"]["value"]    # the future date, e.g. 2026-10-21T02:00
+    print(f"\n'{current}' is in the future, so it cannot be when the item was {verb}.")
+    answer = prompt_detail(
+        f"  When was it {verb}? (e.g. 'yesterday 3pm', '8 Oct around noon'; "
+        f"'{BACK_COMMAND}' for main menu): ",
+        word_count_between(1, 20),
+        "Please enter a date/time of up to 20 words."
+    )
+    return None if answer is None else {"datetime": answer}
+
+
 def choose_colour(colour_options: list[str]) -> str | None:
     """Ask the user to pick the most noticeable colour from Gemini's options.
 

@@ -20,7 +20,6 @@ def archive_expired_items() -> None:
     for item_id in logic_manager.get_expired_item_ids(database_manager.get_all_items()):
         database_manager.update_item(item_id, {"status": "archived"})
 
-
 def process_report(report_type: str) -> dict | None:
     """Collect free-text input and let Gemini extract, validate and format it.
 
@@ -66,9 +65,13 @@ def process_report(report_type: str) -> dict | None:
 
             flagged = logic_manager.get_flagged_fields(item_data)    # missing or unsure fields
             vague_location = logic_manager.is_vague_location(item_data)
-            if not flagged and not vague_location:
+            future_date = logic_manager.is_future_datetime(item_data)
+            if not flagged and not vague_location and not future_date:
                 return item_data
             if last_round:
+                if future_date:
+                    # A future date is wrong, so keep no date rather than a misleading one.
+                    item_data["datetime"] = {"value": None, "confidence": 0.0}
                 io_manager.show_message(
                     "Some details are still unclear; continuing with the information provided."
                 )
@@ -79,6 +82,10 @@ def process_report(report_type: str) -> dict | None:
             if vague_location:
                 answers = io_manager.ask_for_specific_location(item_data, report_type)
                 flagged = [field for field in flagged if field != "location"]
+            if answers is not None and future_date:
+                when = io_manager.ask_for_past_datetime(item_data, report_type)
+                answers = None if when is None else {**answers, **when}
+                flagged = [field for field in flagged if field != "datetime"]
             if answers is not None and flagged:
                 more = io_manager.ask_about_flagged_fields(item_data, flagged, report_type)
                 answers = None if more is None else {**answers, **more}
