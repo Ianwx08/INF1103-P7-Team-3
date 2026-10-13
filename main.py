@@ -20,6 +20,7 @@ def archive_expired_items() -> None:
     for item_id in logic_manager.get_expired_item_ids(database_manager.get_all_items()):
         database_manager.update_item(item_id, {"status": "archived"})
 
+
 def process_report(report_type: str) -> dict | None:
     """Collect free-text input and let Gemini extract, validate and format it.
 
@@ -115,6 +116,7 @@ def handle_lost_item() -> None:
             f"Claimed. Quote reference {chosen['item_id']} at the Lost & Found counter."
         )
 
+
 def handle_found_item() -> None:
     """Menu option 2: build a found report, check for duplicates and save it."""
     found_data = process_report("found")
@@ -129,4 +131,41 @@ def handle_found_item() -> None:
     stored = database_manager.add_item(found_data)    # the item as saved, with its new ID
     io_manager.show_message("\nThank you! Your report has been saved:")
     io_manager.show_message(io_manager.format_item(stored))
-    
+
+
+def main() -> None:
+    """Run the menu loop until the user chooses Exit.
+
+    Archives old items before every menu, and turns file errors into a
+    message instead of a crash.
+    """
+    handlers = {    # menu choice -> function that handles it
+        "lost": handle_lost_item,
+        "found": handle_found_item,
+    }
+
+    while True:
+        try:
+            archive_expired_items()
+        except OSError as error:
+            io_manager.show_message(f"Could not update the data file: {error}")
+
+        choice = io_manager.menu()
+        if choice == "exit":
+            io_manager.show_message("Goodbye!")
+            break
+
+        try:
+            handlers[choice]()
+        except OSError as error:
+            io_manager.show_message(
+                f"Could not read or save the data file: {error}. Nothing was saved."
+            )
+        print()
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (KeyboardInterrupt, EOFError):    # Ctrl+C or closed input
+        print("\nGoodbye!")
