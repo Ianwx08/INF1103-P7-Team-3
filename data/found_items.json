@@ -1,0 +1,86 @@
+[
+  {
+    "report_type": "found",
+    "item_description": {
+      "value": "red laptop bag",
+      "confidence": 0.95
+    },
+    "item_type": {
+      "value": "bag",
+      "confidence": 0.85
+    },
+    "item_colour": {
+      "value": "red",
+      "confidence": 0.95
+    },
+    "item_brand": {
+      "value": null,
+      "confidence": 0.0
+    },
+    "item_unique_info": {
+      "value": null,
+      "confidence": 0.0
+    },
+    "datetime": {
+      "value": "2026-10-13T21:41",
+      "confidence": 0.95
+    },
+    "location": {
+      "value": "lv6 study space",
+      "confidence": 0.95
+    },
+    "colour_options": [
+      "red"
+    ],
+    "prohibited_item": false,
+    "item_recognised": true,
+    "location_specific": true,
+    "missing_fields": [],
+    "overall_confidence": 0.95,
+    "item_id": "FND-0001",
+    "reported_at": "2026-10-13T21:42",
+    "status": "active"
+  },
+  {
+    "report_type": "found",
+    "item_description": {
+      "value": "iPhone blue",
+      "confidence": 0.85
+    },
+    "item_type": {
+      "value": "phone",
+      "confidence": 0.9
+    },
+    "item_colour": {
+      "value": "blue",
+      "confidence": 0.95
+    },
+    "item_brand": {
+      "value": "Apple",
+      "confidence": 0.8
+    },
+    "item_unique_info": {
+      "value": null,
+      "confidence": 0.0
+    },
+    "datetime": {
+      "value": "2026-10-11T12:00",
+      "confidence": 0.65
+    },
+    "location": {
+      "value": "waterway point",
+      "confidence": 0.95
+    },
+    "colour_options": [
+      "blue"
+    ],
+    "prohibited_item": false,
+    "item_recognised": true,
+    "location_specific": true,
+    "missing_fields": [],
+    "overall_confidence": 0.84,
+    "item_id": "FND-0002",
+    "reported_at": "2026-10-13T22:29",
+    "status": "active"
+  }
+]

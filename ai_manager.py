@@ -314,6 +314,9 @@ def extract_item_information(user_input: str) -> dict:
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
             response_schema=RESPONSE_SCHEMA,
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(
+                disable=True
+            ),
         ),
     )
     data = json.loads(response.text)    # the reply as a Python dict
