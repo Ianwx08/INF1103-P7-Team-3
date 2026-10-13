@@ -114,3 +114,19 @@ def handle_lost_item() -> None:
         io_manager.show_message(
             f"Claimed. Quote reference {chosen['item_id']} at the Lost & Found counter."
         )
+
+def handle_found_item() -> None:
+    """Menu option 2: build a found report, check for duplicates and save it."""
+    found_data = process_report("found")
+    if found_data is None:
+        return
+
+    duplicates = logic_manager.find_duplicates(found_data, database_manager.get_active_items())
+    if duplicates and not io_manager.confirm_duplicate(duplicates):
+        io_manager.show_message("Report not saved.")
+        return
+
+    stored = database_manager.add_item(found_data)    # the item as saved, with its new ID
+    io_manager.show_message("\nThank you! Your report has been saved:")
+    io_manager.show_message(io_manager.format_item(stored))
+    
