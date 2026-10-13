@@ -155,6 +155,21 @@ def is_vague_location(item_data: dict) -> bool:
     """True if Gemini gave a location but judged it too vague to find."""
     return bool(field_value(item_data, "location")) and item_data.get("location_specific") is False
 
+FUTURE_TOLERANCE_HOURS = 1   # allow small clock differences before a date counts as "in the future"
+
+
+def is_future_datetime(item_data: dict, now: datetime | None = None) -> bool:
+    """True if the item's date/time is later than now (plus FUTURE_TOLERANCE_HOURS).
+
+    An item cannot be lost or found in the future, so such a date is re-asked.
+    A missing or unreadable date is not treated as future.
+    """
+    when = parse_datetime(field_value(item_data, "datetime"))
+    if when is None:
+        return False
+    now = datetime.now() if now is None else now
+    return when > now + timedelta(hours=FUTURE_TOLERANCE_HOURS)
+
 # Thresholds for lost-item searches: 0.70+ is a top match, 0.50+ a possible match.
 MATCH_CONFIG = {
     "display_threshold": 0.70,
@@ -307,6 +322,15 @@ def score_match(reference: dict, candidate: dict, directional: bool = True) -> f
     return round(min(max(score, 0.0), 1.0), 4)
 
 
+def dates_rule_out_match(lost_value: str, found_value: str) -> bool:
+    """True if the dates alone make a match unlikely.
+
+    That is: found more than EARLY_FOUND_TOLERANCE_HOURS before it was lost,
+    or found 8 or more days after it was lost (date similarity 0).
+    A missing date never rules a match out.
+    """
+    return datetime_similarity(lost_value, found_value, True) == 0.0
+
 
 def find_matches(
     lost_data: dict,
@@ -321,10 +345,13 @@ def find_matches(
     """
     config = MATCH_CONFIG if config is None else config
     items_by_id = {item["item_id"]: item for item in found_items if item.get("item_id")}    # ID -> found item
-    scored = [    # (item_id, match score) pairs for the decision engine
-        (item_id, score_match(lost_data, item))
-        for item_id, item in items_by_id.items()
-    ]
+    scored = []    # (item_id, match score) pairs for the decision engine
+    for item_id, item in items_by_id.items():
+        score = score_match(lost_data, item)
+        # When the dates make the match unlikely, it can be a possible match at most, never a top match.
+        if dates_rule_out_match(field_value(lost_data, "datetime"), field_value(item, "datetime")):
+            score = min(score, round(config["display_threshold"] - 0.01, 4))
+        scored.append((item_id, score))
 
     def attach_items(results: list[dict]) -> list[dict]:
         """Add the full found item to each decision result so it can be displayed."""

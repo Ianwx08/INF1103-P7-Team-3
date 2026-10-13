@@ -348,6 +348,43 @@ def test_archiving() -> None:
     expired = logic_manager.get_expired_item_ids(items, now=now)
     check("only the 8-day-old active item expires", expired == ["OLD"], f"got {expired}")
 
+def test_date_rules() -> None:
+    print("\n9. Future dates and dates that rule out a match")
+    now = datetime(2026, 10, 14, 12, 0)
+    check("date 2 hours in the future is rejected",
+          logic_manager.is_future_datetime(with_date(LOST_PHONE, "2026-10-14T14:00"), now=now))
+    check("date 30 minutes ahead is allowed (1-hour tolerance)",
+          not logic_manager.is_future_datetime(with_date(LOST_PHONE, "2026-10-14T12:30"), now=now))
+    check("past date is fine", not logic_manager.is_future_datetime(LOST_PHONE, now=now))
+    check("missing date is not treated as future", not logic_manager.is_future_datetime(INCOMPLETE_REPORT | {
+        "datetime": {"value": None, "confidence": 0.0}}, now=now))
+
+    lost = "2026-10-09T02:00"
+    check("found 12 days after lost rules out a match", logic_manager.dates_rule_out_match(lost, "2026-10-21T02:00"))
+    check("found 3 days before lost rules out a match", logic_manager.dates_rule_out_match(lost, "2026-10-06T02:00"))
+    check("found 1 day after lost does not", not logic_manager.dates_rule_out_match(lost, "2026-10-10T02:00"))
+    check("missing date never rules out a match", not logic_manager.dates_rule_out_match(lost, ""))
+
+    # The reported bug: found item dated 12 days after the loss used to be a top match (0.89).
+    lost_report = with_date(LOST_PHONE, lost)
+    far_found = with_date(FOUND_PHONE, "2026-10-21T02:00")
+    results = logic_manager.find_matches(lost_report, [far_found])
+    check("12 days apart: shown only as a possible match, not a top match",
+          results["matches"] == [] and [m["item_id"] for m in results["possible_matches"]] == ["FND-0001"])
+    early_found = with_date(FOUND_PHONE, "2026-10-06T02:00")
+    results = logic_manager.find_matches(lost_report, [early_found])
+    check("found 3 days before lost: possible match only",
+          results["matches"] == [] and len(results["possible_matches"]) == 1)
+    close_found = with_date(FOUND_PHONE, "2026-10-10T02:00")
+    check("sensible dates are still a top match",
+          [m["item_id"] for m in logic_manager.find_matches(lost_report, [close_found])["matches"]] == ["FND-0001"])
+    weak = with_date(FOUND_UMBRELLA, "2026-10-21T02:00")
+    check("a weak match far apart stays hidden",
+          logic_manager.find_matches(lost_report, [weak]) == {"matches": [], "possible_matches": []})
+
+
+# -------------------------
+
 
 # -------------------------
 # Run everything
@@ -362,6 +399,7 @@ if __name__ == "__main__":
     test_dates()
     test_matching()
     test_archiving()
+    test_date_rules()
 
     failed = [name for name, passed, _ in RESULTS if not passed]
     print(f"\n{len(RESULTS) - len(failed)} of {len(RESULTS)} tests passed")
