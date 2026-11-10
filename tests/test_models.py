@@ -2,7 +2,7 @@
 import unittest
 from datetime import datetime
 
-from models import AIFlags, ExtractedField, FoundItem, Item, LostItem
+from models import AIFlags, ExtractedField, FoundItem, Item, ItemMatch, LostItem, MatchDecision
 
 # A validated Gemini reply, as ai_manager will hand it over.
 SAMPLE_AI_REPLY = {
@@ -154,6 +154,19 @@ class TestFoundItem(unittest.TestCase):
     def test_invalid_status_rejected(self):
         with self.assertRaises(ValueError):
             FoundItem(status="lost")
+
+class TestItemMatch(unittest.TestCase):
+    def test_refers_to_found_item_with_score_and_decision(self):
+        found = FoundItem.from_dict(PHASE1_RECORD)
+        match = ItemMatch(found, 0.86, MatchDecision.DISPLAY)
+        self.assertIs(match.item, found)
+        self.assertEqual(match.decision.value, "display")
+
+    def test_score_must_be_between_0_and_1(self):
+        found = FoundItem.from_dict(PHASE1_RECORD)
+        for bad in (1.5, -0.1, True, "0.8"):
+            with self.assertRaises(ValueError):
+                ItemMatch(found, bad, MatchDecision.REVIEW)
 
 
 if __name__ == "__main__":
