@@ -82,3 +82,32 @@ docker run --rm --network none lost-and-found python test_logic.py
 The Docker test runs without network access.
 
 The tests print PASS/FAIL results and exit with code 1 if any test fails.
+
+## Continuous Integration (CI)
+
+GitHub Actions automatically runs the project's offline unit tests whenever code is pushed or a pull request is created.
+
+The CI workflow is located at `.github/workflows/ci.yml`.
+
+The workflow:
+1. Checks out the latest code.
+2. Sets up Python 3.12.
+3. Installs dependencies from `requirements.txt`.
+4. Runs the automated unit tests.
+
+The tests use sample AI responses and do not require a Gemini API key or internet connection.
+
+### Run Tests Locally
+
+```powershell
+python -m unittest discover tests -v
+```
+
+### View CI Results
+
+Open the GitHub repository and select the **Actions** tab.
+
+- A green check means the tests passed.
+- A red cross means the tests failed.
+
+The workflow can also be started manually from the Actions tab.
