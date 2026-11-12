@@ -1,4 +1,6 @@
-"""Shared test helpers for offline AI reply tests."""
-from tests.helpers.sample_replies import SampleReplies
+"""Shared test helpers for offline testing."""
 
-__all__ = ["SampleReplies"]
+from tests.helpers.sample_replies import SampleReplies
+from tests.helpers.scripted_io_manager import ScriptedIOManager
+
+__all__ = ["SampleReplies", "ScriptedIOManager"]
