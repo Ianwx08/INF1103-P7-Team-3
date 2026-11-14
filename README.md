@@ -61,41 +61,24 @@ The commands:
 
 The Docker image uses the Asia/Singapore timezone.
 
+
+## Project Structure (OOP Part 2)
+
+The project uses an object-oriented structure:
+
+- `main.py` — LostAndFoundApp entry point
+- `models/` — Item classes and related data models
+- `managers/` — AI, IO, data and logic managers
+- `tests/` — Automated offline unit tests
+- `tests/helpers/` — SampleReplies and ScriptedIOManager
+- `Dockerfile` — Docker image configuration
+- `.github/workflows/ci.yml` — GitHub Actions workflow
+
 ## Automated Tests
 
-`test_logic.py` tests the functions in `logic_manager.py` using hard-coded sample AI responses.
+The OOP tests are located in `tests/`.
 
-These tests do not require an API key or an internet connection.
-
-### Run Tests Locally
-
-```powershell
-python test_logic.py
-```
-
-### Run Tests Inside Docker
-
-```powershell
-docker run --rm --network none lost-and-found python test_logic.py
-```
-
-The Docker test runs without network access.
-
-The tests print PASS/FAIL results and exit with code 1 if any test fails.
-
-## Continuous Integration (CI)
-
-GitHub Actions automatically runs the project's offline unit tests whenever code is pushed or a pull request is created.
-
-The CI workflow is located at `.github/workflows/ci.yml`.
-
-The workflow:
-1. Checks out the latest code.
-2. Sets up Python 3.12.
-3. Installs dependencies from `requirements.txt`.
-4. Runs the automated unit tests.
-
-The tests use sample AI responses and do not require a Gemini API key or internet connection.
+They use sample AI responses and mock managers, so they do not require a Gemini API key or internet connection.
 
 ### Run Tests Locally
 
@@ -103,11 +86,41 @@ The tests use sample AI responses and do not require a Gemini API key or interne
 python -m unittest discover tests -v
 ```
 
+### Run Tests Inside Docker
+
+First, build the image:
+
+```powershell
+docker build -t lost-and-found .
+```
+
+Then run the complete test suite:
+
+```powershell
+docker run --rm --network none lost-and-found python -m unittest discover tests -v
+```
+
+The `--network none` option disables networking inside the container during testing.
+
+## Continuous Integration (CI)
+
+GitHub Actions automatically runs the Docker build and offline tests whenever code is pushed or a pull request is created.
+
+The workflow is located at `.github/workflows/ci.yml`.
+
+The workflow:
+
+1. Checks out the latest project code.
+2. Builds the Docker image.
+3. Runs the automated unit tests inside Docker with networking disabled.
+
+No Gemini API key or GitHub secret is required for these tests.
+
 ### View CI Results
 
 Open the GitHub repository and select the **Actions** tab.
 
-- A green check means the tests passed.
-- A red cross means the tests failed.
+- A green check means the Docker build and tests passed.
+- A red cross means the workflow failed.
 
 The workflow can also be started manually from the Actions tab.

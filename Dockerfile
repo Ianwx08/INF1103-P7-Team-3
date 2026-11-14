@@ -24,6 +24,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the application's Python files
 COPY *.py ./
 
+# Copy the OOP packages and automated tests
+COPY models/ ./models/
+COPY managers/ ./managers/
+COPY tests/ ./tests/
+
 # Create the data directory
 RUN mkdir -p /app/data
 
