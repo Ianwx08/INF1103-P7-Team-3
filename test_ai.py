@@ -1,38 +1,34 @@
+from __future__ import annotations
 import json
-from ai_manager import extract_item_information
+from dotenv import load_dotenv
+from managers.ai.gemini_ai_manager import GeminiAIManager
+from managers.base.base_ai_manager import BaseAIManager
+
+class LiveAICheck:
+    """Runs sample reports through any BaseAIManager"""
+
+    SAMPLES = [
+        ("lost", "Airpod pro 3 with keychain with logo", "15 July 2026 2.05pm", "Tampines Mall"),
+        ("found", "blue wallet", "20 September 2026 at 7pm", "Punggol MRT"),
+        ("lost", "black Samsung Galaxy S25", "1 October 2026 3.30pm", "SIT Punggol food court"),
+        ("lost", "my AirPods Pro", "not sure", "Tampines Mall"),
+    ]
+
+    def __init__(self, ai: BaseAIManager) -> None:
+        self._ai = ai
+
+    def run(self) -> None:
+        for report_type, description, when, where in self.SAMPLES:
+            print("\n====================================")
+            print(f"INPUT ({report_type}): {description} | {when} | {where}")
+            item = self._ai.analyse(report_type, {"description": description, "date_time": when, "location": where})
+            if item is None:
+                print("\nAI OUTPUT: none (Gemini failed or the reply did not pass the schema check)")
+                continue
+            print("\nAI OUTPUT:")
+            print(json.dumps(item.ai_record(), indent=4))
 
 
-test_inputs = [
-    "Airpod pro 3 with keychain with logo lost at Tampines Mall 15 July 2026 2.05pm",
-
-    "Found blue wallet at Punggol MRT on 20 September 2026 at 7pm",
-
-    "Lost black Samsung Galaxy S25 at SIT Punggol food court 1 October 2026 3.30pm",
-
-    "Lost my AirPods Pro at Tampines Mall"
-]
-
-
-for test_input in test_inputs:
-
-    print("\n====================================")
-    print("INPUT:")
-    print(test_input)
-
-    try:
-
-        result = extract_item_information(test_input)
-
-        print("\nAI OUTPUT:")
-
-        print(
-            json.dumps(
-                result,
-                indent=4
-            )
-        )
-
-    except Exception as error:
-
-        print("\nERROR:")
-        print(error)
+if __name__ == "__main__":
+    load_dotenv()
+    LiveAICheck(GeminiAIManager()).run()
