@@ -1,9 +1,13 @@
+# Continuous Integration: build the Docker image and run the offline unit tests
+# on every push and pull request. No Gemini API key or GitHub secret is needed:
+# the tests use hard-coded sample AI replies, and --network none proves they never
+# call the live API.
 name: CI
 
 on:
   push:
   pull_request:
-  workflow_dispatch:
+  workflow_dispatch:        # also allows a manual run from the Actions tab
 
 jobs:
   test:
@@ -20,3 +24,6 @@ jobs:
 
       - name: Run the unit tests inside the container (networking off)
         run: docker run --rm --network none lost-and-found python -m unittest discover tests -v
+
+      - name: Check the sample data loads inside the container
+        run: docker run --rm --network none -e DATA_DIR=/tmp/data lost-and-found python seed_data.py
