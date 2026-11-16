@@ -26,6 +26,7 @@ class LostAndFoundApp:
         self._handlers = {
             "lost": self._logic.report_lost_item,
             "found": self._logic.report_found_item,
+            "overview": self._logic.view_stored_items,
         }
 
     @classmethod

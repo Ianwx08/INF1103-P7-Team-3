@@ -218,9 +218,9 @@ class TestApp(WorkflowTestCase):
     def test_menu_loop_found_then_lost_then_exit(self):
         app = LostAndFoundApp(self.io, self.logic)
         self.ai.queue(ai_reply(when=PAST), ai_reply("lost", when="2026-10-13T14:00"))
-        self.io.add_answers("5", "2", *DETAILS, "1", *DETAILS, "1", "y", "3")
+        self.io.add_answers("5", "2", *DETAILS, "1", *DETAILS, "1", "y", "4")
         app.run()
-        self.assertIn("Invalid choice. Enter 1, 2 or 3.", self.io.text)
+        self.assertIn("Invalid choice. Enter 1, 2, 3 or 4.", self.io.text)
         self.assertIn("Claimed. Quote reference FND-0001", self.io.text)
         self.assertEqual(self.io.output[-1], "Goodbye!")
         self.assertEqual(self.io.unused_answers, [])
@@ -228,10 +228,20 @@ class TestApp(WorkflowTestCase):
     def test_disk_errors_become_messages(self):
         logic = LogicManager(MockAIManager([ai_reply(when=PAST)], notify=lambda m: None),
                              BrokenDataManager(), self.io, clock=lambda: NOW)
-        self.io.add_answers("2", *DETAILS, "3")
+        self.io.add_answers("2", *DETAILS, "3", "4")     # report found, view stored items, exit
         LostAndFoundApp(self.io, logic).run()
         self.assertIn("Could not update the data file: disk unavailable", self.io.text)
         self.assertIn("Could not read or save the data file: disk unavailable. Nothing was saved.", self.io.text)
+        self.assertEqual(self.io.text.count("Could not read or save the data file"), 2)   # report + overview
+
+
+    def test_menu_view_stored_items(self):
+        self.store(when=PAST)
+        self.io.add_answers("3", "1", "4")
+        LostAndFoundApp(self.io, self.logic).run()
+        self.assertIn("You selected: View stored items", self.io.text)
+        self.assertIn("Stored found items: 1", self.io.text)
+        self.assertEqual(self.ai.calls, [])          # the overview never calls Gemini
 
 if __name__ == "__main__":
     unittest.main()

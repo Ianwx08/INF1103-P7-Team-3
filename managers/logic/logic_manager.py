@@ -1,4 +1,4 @@
-"""LogicManager: Runs the report, search and archiving workflows."""
+"""LogicManager: Runs the report, search, overview and archiving workflows."""
 from __future__ import annotations
 from datetime import datetime
 from typing import Callable, Sequence
@@ -9,6 +9,7 @@ from managers.base.follow_up_rule import FollowUpRule
 from managers.base.item_correction import ItemCorrection
 from managers.logic.colour_choice_correction import ColourChoiceCorrection
 from managers.logic.matching_service import MatchingService
+from managers.logic.overview.overview_service import OverviewService
 from managers.logic.rules.future_date_rule import FutureDateRule
 from managers.logic.rules.missing_fields_rule import MissingFieldsRule
 from managers.logic.rules.prohibited_item_rule import ProhibitedItemRule
@@ -18,10 +19,10 @@ from models.found_item import FoundItem
 from models.item import Item
 
 class LogicManager:
-    """Runs the report, search and archiving workflows.
+    """Runs the report, search, overview and archiving workflows.
 
     Association: uses the AI, data and IO managers it is given (any implementation).
-    Composition: owns its MatchingService. Aggregation: holds the rules and corrections
+    Composition: owns its MatchingService and OverviewService. Aggregation: holds the rules and corrections
     it is given, so new checks are added without changing this class.
     """
 
@@ -31,9 +32,11 @@ class LogicManager:
                  matching: MatchingService | None = None,
                  rules: Sequence[FollowUpRule] | None = None,
                  corrections: Sequence[ItemCorrection] | None = None,
-                 clock: Callable[[], datetime] = datetime.now) -> None:
+                 clock: Callable[[], datetime] = datetime.now,
+                 overview: OverviewService | None = None) -> None:
         self._ai, self._data, self._io = ai, data, io
         self._matching = matching or MatchingService()
+        self._overview = overview or OverviewService()
         self._rules = list(rules) if rules is not None else self.default_rules(clock)
         self._corrections = list(corrections) if corrections is not None else [ColourChoiceCorrection()]
         self._clock = clock
@@ -141,6 +144,25 @@ class LogicManager:
         stored = self._data.add(found)
         self._io.show_message("\nThank you! Your report has been saved:")
         self._io.show_item(stored)
+
+
+    # ---- menu option 3 ----
+    def view_stored_items(self) -> None:
+        """Show every active found item, sorted the way the user picks. Makes no AI call."""
+        items = self._data.load_all()
+        if not any(item.is_active() for item in items):
+            message = "No found items are stored at the moment."
+            if items:
+                message = (f"No active found items at the moment. "
+                           f"{len(items)} archived item(s) are not listed.")
+            self._io.show_message(message)
+            return
+        label = self._io.choose_option("Sort the stored items by:", self._overview.labels)
+        if label is None:
+            self._io.show_message("\nReturning to the main menu.")
+            return
+        self._io.show_overview(self._overview.build(items, self._overview.find_order(label)))
+
 
     # ---- before every menu ----
     def archive_expired(self) -> list[FoundItem]:
