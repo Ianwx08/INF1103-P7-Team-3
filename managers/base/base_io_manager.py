@@ -7,6 +7,7 @@ from typing import Sequence
 from models.found_item import FoundItem
 from models.item import Item
 from models.item_match import ItemMatch
+from models.stored_items_overview import StoredItemsOverview
 
 
 class BaseIOManager(ABC):
@@ -16,7 +17,7 @@ class BaseIOManager(ABC):
 
     @abstractmethod
     def menu(self) -> str:
-        """Show the main menu; return "lost", "found" or "exit"."""
+        """Show the main menu; return "lost", "found", "overview" or "exit"."""
 
     @abstractmethod
     def get_report_details(self, report_type: str) -> dict[str, str] | None:
@@ -58,3 +59,7 @@ class BaseIOManager(ABC):
     @abstractmethod
     def show_message(self, message: str) -> None:
         """Show a line of text."""
+
+    @abstractmethod
+    def show_overview(self, overview: StoredItemsOverview) -> None:
+        """Show the stored found items list (menu option "View stored items")."""

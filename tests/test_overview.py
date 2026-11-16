@@ -1,12 +1,18 @@
 """New feature: overview of stored items, sorted by date or item type. No API calls."""
+import os
+import tempfile
 import unittest
+from datetime import datetime
+
+from managers.ai.mock_ai_manager import MockAIManager
 from managers.base.item_sort_order import ItemSortOrder
+from managers.data.json_data_manager import JsonDataManager
+from managers.logic.logic_manager import LogicManager
 from managers.logic.overview.found_date_order import FoundDateOrder
 from managers.logic.overview.item_type_order import ItemTypeOrder
 from managers.logic.overview.overview_service import OverviewService
 from models import FoundItem, Item, StoredItemsOverview
-from tests.helpers import SampleReplies
-
+from tests.helpers import SampleReplies, ScriptedIOManager
 
 ai_reply = SampleReplies.ai_reply
 
@@ -117,6 +123,65 @@ class TestOverviewService(unittest.TestCase):
             overview.sort_label = "changed"
         with self.assertRaises(ValueError):
             StoredItemsOverview("x", (), archived_count=-1)
+
+
+class TestViewStoredItems(unittest.TestCase):
+    def setUp(self):
+        self.data = JsonDataManager(os.path.join(tempfile.mkdtemp(), "found_items.json"), notify=lambda m: None)
+        self.ai = MockAIManager(notify=lambda m: None)
+        self.io = ScriptedIOManager()
+        self.logic = LogicManager(self.ai, self.data, self.io, clock=lambda: datetime(2026, 10, 14, 12, 0))
+
+    def test_nothing_stored(self):
+        self.logic.view_stored_items()
+        self.assertIn("No found items are stored at the moment.", self.io.text)
+        self.assertEqual(self.io.prompts, [])
+
+    def test_only_archived_items(self):
+        self.data.add(ARCHIVED)
+        self.logic.view_stored_items()
+        self.assertIn("No active found items at the moment. 1 archived item(s) are not listed.", self.io.text)
+        self.assertEqual(self.io.prompts, [])
+
+    def test_sorted_by_date_newest_first(self):
+        for item in ITEMS + [ARCHIVED]:
+            self.data.add(item)
+        self.io.add_answers("1")
+        self.logic.view_stored_items()
+        listed = [line for line in self.io.output if ". [FND-" in line]
+        self.assertTrue(listed[0].startswith("1. [FND-0003]"))
+        self.assertTrue(listed[-1].startswith("5. [FND-0004]"))
+        self.assertIn("Stored found items: 5 | Sorted by: Date found (newest first)", self.io.text)
+        self.assertIn("By type: phone (2), umbrella (1), unknown (1), wallet (1)", self.io.text)
+        self.assertIn("1 archived item(s) are not listed.", self.io.text)
+        self.assertEqual(self.ai.calls, [])
+
+    def test_sorted_by_type_after_an_invalid_choice(self):
+        for item in ITEMS:
+            self.data.add(item)
+        self.io.add_answers("7", "3")
+        self.logic.view_stored_items()
+        self.assertIn("Invalid choice.", self.io.text)
+        listed = [line for line in self.io.output if ". [FND-" in line]
+        self.assertEqual([line.split("]")[0][3:] + "]" for line in listed][:2], ["[FND-0003]", "[FND-0001]"])
+
+    def test_back_returns_to_menu(self):
+        self.data.add(WALLET)
+        self.io.add_answers("back")
+        self.logic.view_stored_items()
+        self.assertIn("Returning to the main menu.", self.io.text)
+        self.assertNotIn("Stored found items:", self.io.text)
+
+    def test_description_and_unique_features_are_hidden(self):
+        self.data.add(sample("FND-0009", "wallet", "2026-10-12T15:00", unique="initials J.W. inside",
+                             description="brown wallet with a torn corner"))
+        self.io.add_answers("1")
+        self.logic.view_stored_items()
+        self.assertIn("[FND-0009] Type: wallet | Colour: black | Brand: Samsung", self.io.text)
+        self.assertIn("Found: 2026-10-12T15:00 | Where: SIT Punggol food court", self.io.text)
+        self.assertNotIn("initials J.W.", self.io.text)
+        self.assertNotIn("torn corner", self.io.text)
+        self.assertIn("Descriptions and unique features are hidden", self.io.text)
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ from managers.base.base_io_manager import BaseIOManager
 from models.found_item import FoundItem
 from models.item import Item
 from models.item_match import ItemMatch
+from models.stored_items_overview import StoredItemsOverview
 
 
 class ConsoleIOManager(BaseIOManager):
@@ -38,18 +39,20 @@ class ConsoleIOManager(BaseIOManager):
         self._write("What are you here for?")
         self._write("1. Find a lost item")
         self._write("2. Report a found item")
-        self._write("3. Exit\n")
+        self._write("3. View stored items")
+        self._write("4. Exit\n")
         choices = {"1": ("lost", "\nYou selected: Find a lost item\n"),
-                   "2": ("found", "\nYou selected: Report a found item\n")}
+                   "2": ("found", "\nYou selected: Report a found item\n"),
+                   "3": ("overview", "\nYou selected: View stored items\n")}
         while True:
-            answer = self._read("Enter your choice (1-3): ").strip()
+            answer = self._read("Enter your choice (1-4): ").strip()
             if answer in choices:
                 choice, message = choices[answer]
                 self._write(message)
                 return choice
-            if answer == "3":
+            if answer == "4":
                 return "exit"
-            self._write("Invalid choice. Enter 1, 2 or 3.")
+            self._write("Invalid choice. Enter 1, 2, 3 or 4.")
 
     # ---- questions ----
     def ask_detail(self, prompt: str, min_words: int, max_words: int, error: str) -> str | None:
@@ -142,6 +145,30 @@ class ConsoleIOManager(BaseIOManager):
             f"    Unique features: {value(item.unique_info)}",
             f"    When: {value(item.when)} | Where: {value(item.location)}",
         ])
+
+    @staticmethod
+    def format_summary(item: Item) -> str:
+        """The 2-line block used in the overview. The description and unique features are left
+        out on purpose: anyone can open the overview, and those details are what the real
+        owner uses to describe (and so claim) the item."""
+        def value(field) -> str:
+            return field.value if field.value else "-"
+        item_id = getattr(item, "item_id", None) or "NEW"
+        return "\n".join([
+            f"[{item_id}] Type: {value(item.item_type)} | Colour: {value(item.colour)} | Brand: {value(item.brand)}",
+            f"    Found: {value(item.when)} | Where: {value(item.location)}",
+        ])
+
+    def show_overview(self, overview: StoredItemsOverview) -> None:
+        self._write(f"Stored found items: {overview.total} | Sorted by: {overview.sort_label}")
+        if overview.type_counts:
+            self._write("By type: " + ", ".join(f"{name} ({count})" for name, count in overview.type_counts))
+        if overview.archived_count:
+            self._write(f"{overview.archived_count} archived item(s) are not listed.")
+        self._write("Descriptions and unique features are hidden. "
+                    "If one is yours, use 'Find a lost item' to describe and claim it.\n")
+        for number, item in enumerate(overview.items, start=1):
+            self._write(f"{number}. " + self.format_summary(item))
 
     def show_item(self, item: Item) -> None:
         self._write(self.format_item(item))
