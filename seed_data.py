@@ -2,7 +2,7 @@
 
     python seed_data.py
 
-Uses the same JSON file as main.py (DATA_DIR from .env, else data/found_items.json). No API key needed.
+Uses the same storage as main.py (STORAGE_BACKEND / DATA_DIR from .env). No API key needed.
 """
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import sys
 
 from dotenv import load_dotenv
 
-from managers.data.json_data_manager import JsonDataManager
+from managers.data.data_manager_factory import DataManagerFactory
 from managers.samples.sample_data_loader import SampleDataLoader
 from managers.samples.sample_data_seeder import SampleDataSeeder
 
@@ -29,10 +29,15 @@ class SeedDataCommand:
             self._notify(f"Could not load the sample data: {error}")
             return 1
         self._notify(f"Added {added} sample found item(s); {skipped} were already stored.")
-        self._notify("Run python main.py and choose 1 (Find a lost item) to search for one of them.")
+        self._notify("Run python main.py and choose 3 to see them, or 1 to search for one.")
         return 0
 
 
 if __name__ == "__main__":
-    load_dotenv()    # DATA_DIR, same as main.py
-    sys.exit(SeedDataCommand(SampleDataSeeder(SampleDataLoader(), JsonDataManager())).run())
+    load_dotenv()    # STORAGE_BACKEND / DATA_DIR, same as main.py
+    try:
+        store = DataManagerFactory().create()
+    except ValueError as error:
+        print(error)
+        sys.exit(1)
+    sys.exit(SeedDataCommand(SampleDataSeeder(SampleDataLoader(), store)).run())

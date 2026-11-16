@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 from managers.ai.gemini_ai_manager import GeminiAIManager
 from managers.base.base_io_manager import BaseIOManager
-from managers.data.json_data_manager import JsonDataManager
+from managers.data.data_manager_factory import DataManagerFactory
 from managers.io.console_io_manager import ConsoleIOManager
 from managers.logic.logic_manager import LogicManager
 
@@ -31,9 +31,10 @@ class LostAndFoundApp:
 
     @classmethod
     def create_default(cls) -> "LostAndFoundApp":
-        """The real app: Gemini AI, JSON storage, console IO."""
+        """The real app: Gemini AI, the configured storage (SQLite database by default), console IO."""
         io = ConsoleIOManager()
-        logic = LogicManager(ai=GeminiAIManager(), data=JsonDataManager(), io=io)
+        data = DataManagerFactory(notify=io.show_message).create()
+        logic = LogicManager(ai=GeminiAIManager(), data=data, io=io)
         return cls(io, logic)
 
     def run(self) -> None:
@@ -57,12 +58,15 @@ class LostAndFoundApp:
 
 
 if __name__ == "__main__":
-    load_dotenv()    # GEMINI_API_KEY, and optional GEMINI_MODEL / DATA_DIR, from .env
+    load_dotenv()    # GEMINI_API_KEY, and optional GEMINI_MODEL / DATA_DIR / STORAGE_BACKEND, from .env
     # The app cannot work without Gemini, so stop straight away if there is no key.
     if not os.getenv("GEMINI_API_KEY"):
         print("GEMINI_API_KEY is not set. Copy .env.example to .env and add your key.")
         sys.exit(1)
     try:
         LostAndFoundApp.create_default().run()
+    except ValueError as error:    # e.g. STORAGE_BACKEND is not "sqlite" or "json"
+        print(error)
+        sys.exit(1)
     except (KeyboardInterrupt, EOFError):    # Ctrl+C or closed input
         print("\nGoodbye!")
