@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from datetime import datetime
 
-from managers.data.json_data_manager import JsonDataManager
+from managers.data.sqlite_data_manager import SqliteDataManager
 from managers.logic.matching_service import MatchingService
 from managers.samples.sample_data_loader import SampleDataLoader
 from managers.samples.sample_data_seeder import SampleDataSeeder
@@ -111,7 +111,7 @@ class TestSampleDataLoader(unittest.TestCase):
 
 class TestSampleDataSeeder(unittest.TestCase):
     def setUp(self):
-        self.data = JsonDataManager(os.path.join(tempfile.mkdtemp(), "found_items.json"), notify=lambda m: None)
+        self.data = SqliteDataManager(os.path.join(tempfile.mkdtemp(), "found_items.db"), notify=lambda m: None)
         self.loader = SampleDataLoader(clock=lambda: NOW)
 
     def test_seed_once_then_skip(self):

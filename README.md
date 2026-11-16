@@ -21,18 +21,23 @@
 Before a claim is confirmed, the item is read again from storage, so an item claimed or archived
 in the meantime is not claimed twice ("Sorry, this item is no longer available.").
 
-## Storage
+## Storage (database)
 
-Found items are stored in a JSON flat file, data/found_items.json (or DATA_DIR/found_items.json).
-Saves go through a temporary file so a crash cannot corrupt it; an unreadable file is kept as
-found_items.json.corrupt-<time>. Items are archived 7 days after they were reported.
+Found items are stored in an SQLite database, data/found_items.db (Python's built-in sqlite3;
+nothing extra to install). Each item field is its own column, so the data can be queried with SQL.
+
+To use the JSON flat file instead, add to .env:
+   STORAGE_BACKEND=json
+
+The first time the database is used, items from an existing data/found_items.json are imported
+automatically and that file is renamed to found_items.json.imported-<time>.
 
 ## Example data (saves Gemini API tokens)
 
    python seed_data.py
 
 Adds 24 example found items (phones, wallets, umbrellas, bottles, earbuds, a laptop, keys, ...)
-to the same JSON file main.py uses. No API key or Gemini call is needed. Dates are relative
+to the same storage main.py uses. No API key or Gemini call is needed. Dates are relative
 ("found 2 days ago at 15:00"), so the items are always recent when loaded; running it again
 does not create copies. Edit samples/sample_found_items.json to change them.
 
@@ -72,7 +77,8 @@ On Windows PowerShell use `-v "${PWD}/data:/app/data"`.
                 similarity_strategy.py, item_sort_order.py, follow_up_rule.py, item_correction.py
      ai/        AIManager:   gemini_ai_manager.py, mock_ai_manager.py, schema_validator.py,
                 prompt_builder.py, ai_error_translator.py, constants.py (schema + prompt)
-     data/      DataManager: json_data_manager.py, constants.py
+     data/      DataManager: sqlite_data_manager.py, found_item_row_mapper.py, json_data_manager.py,
+                data_manager_factory.py, data_migrator.py, constants.py
      logic/     LogicManager: logic_manager.py, matching_service.py, match_scorer.py,
                 text_similarity.py, date_similarity.py, decision_engine.py, threshold_config.py,
                 colour_choice_correction.py
@@ -83,12 +89,14 @@ On Windows PowerShell use `-v "${PWD}/data:/app/data"`.
 
    tests/                         offline unit tests (mock AI replies, no API calls)
      helpers/                     scripted_io_manager.py, sample_replies.py
+   docs/phase2/                   step-by-step explanations of every class
 
 ## Automated tests
 
 The tests in tests/ cover the models, schema validation, the AI managers (with a
-fake Gemini client), JSON storage, matching, follow-up rules, the claim check, the
-example data and full workflows. They use hard-coded sample AI replies and need no API key or internet connection.
+fake Gemini client), both storage backends (the same contract tests run on JSON and
+SQLite), matching, follow-up rules, the stored-items overview, the example data and full
+workflows. They use hard-coded sample AI replies and need no API key or internet connection.
 
 Locally:
    python -m unittest discover tests
