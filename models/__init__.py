@@ -17,6 +17,7 @@ from models.item import Item
 from models.item_match import ItemMatch
 from models.lost_item import LostItem
 from models.match_decision import MatchDecision
+from models.stored_items_overview import StoredItemsOverview
 
 __all__ = [
     "DATETIME_FORMAT",
@@ -28,5 +29,6 @@ __all__ = [
     "ItemMatch",
     "LostItem",
     "MatchDecision",
+    "StoredItemsOverview",
 
 ]
