@@ -4,5 +4,6 @@
 - DecisionEngine with ThresholdConfig: score -> MatchDecision
 - MatchingService: matches, duplicates, expiry
 - rules/: the follow-up rules (FollowUpRule); ColourChoiceCorrection (ItemCorrection)
+- overview/: sort orders (ItemSortOrder) and OverviewService for "View stored items"
 LogicManager composes these and is given (association) the AI, data and IO managers.
 """
