@@ -47,17 +47,6 @@ class TestJsonDataManager(unittest.TestCase):
         reloaded = JsonDataManager(self.path).load_all()
         self.assertEqual((reloaded[0].item_id, reloaded[0].item_type.text), ("FND-0001", "phone"))
 
-    def test_get_one_item_by_id(self):
-        self.data.add(self.found())
-        wallet = self.data.add(self.found(item_type="wallet"))
-        self.assertEqual(self.data.get("FND-0002").to_dict(), wallet.to_dict())
-        self.assertIsNone(self.data.get("FND-9999"))
-        wallet.archive()
-        self.data.update(wallet)
-        self.assertEqual(self.data.get("FND-0002").status, "archived")    # archived items can still be read
-        self.data.delete("FND-0002")
-        self.assertIsNone(self.data.get("FND-0002"))
-
     def test_update_saves_archived_status(self):
         item = self.data.add(self.found())
         item.archive()

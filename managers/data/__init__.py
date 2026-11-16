@@ -1,1 +1,2 @@
-"""DataManager: JsonDataManager stores found items in a JSON flat file. constants.py holds the default folder."""
+"""DataManager: JsonDataManager (flat file) and SqliteDataManager (database, default) with its
+FoundItemRowMapper, plus DataManagerFactory (chooses the store) and DataMigrator (JSON -> database)."""

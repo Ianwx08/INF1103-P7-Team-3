@@ -2,12 +2,15 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import Iterable
 
 from models.found_item import FoundItem
 
 
 class BaseDataManager(ABC):
     """Stores found items. Lost reports are never stored."""
+
+    ID_PREFIX = "FND-"   # every store gives IDs like FND-0001
 
     @abstractmethod
     def load_all(self) -> list[FoundItem]:
@@ -28,11 +31,29 @@ class BaseDataManager(ABC):
     def get(self, item_id: str) -> FoundItem | None:
         """One stored item by its ID (active or archived), or None if there is none.
 
-        Used to check an item is still available just before it is claimed. Concrete, so
-        every store has it; a store may override it with a faster lookup that returns the same item.
+        Default: search load_all(). A store may override it with a faster lookup,
+        as long as it returns the same item (the database store uses its primary key).
         """
         return next((item for item in self.load_all() if item.item_id == item_id), None)
 
     def get_active(self) -> list[FoundItem]:
-        """Items that can still be matched (not archived). Shared by every implementation."""
+        """Items that can still be matched (not archived).
+
+        Default: filter load_all(). A store may override it with a faster query,
+        as long as it returns the same items (the database store does).
+        """
         return [item for item in self.load_all() if item.is_active()]
+
+    @classmethod
+    def _next_id_from(cls, existing_ids: Iterable[str | None]) -> str:
+        """The next sequential ID after the highest one in existing_ids, e.g. FND-0004.
+
+        One rule for every store, so JSON and the database number items the same way.
+        """
+        highest = 0
+        for item_id in existing_ids:
+            item_id = str(item_id or "")
+            suffix = item_id[len(cls.ID_PREFIX):]
+            if item_id.startswith(cls.ID_PREFIX) and suffix.isdigit():
+                highest = max(highest, int(suffix))
+        return f"{cls.ID_PREFIX}{highest + 1:04d}"

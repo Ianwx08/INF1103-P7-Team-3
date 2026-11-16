@@ -96,11 +96,6 @@ class JsonDataManager(BaseDataManager):
         self._notify(f"Warning: found items file was unreadable. Backed up to {backup_path}")
 
     def _next_id(self, records: list[dict[str, Any]]) -> str:
-        """Next sequential ID after the highest one stored, e.g. FND-0004."""
-        highest = 0
-        for record in records:
-            item_id = str(record.get("item_id", ""))
-            suffix = item_id[len(self.ID_PREFIX):]
-            if item_id.startswith(self.ID_PREFIX) and suffix.isdigit():
-                highest = max(highest, int(suffix))
-        return f"{self.ID_PREFIX}{highest + 1:04d}"
+        """Next sequential ID after the highest one stored, e.g. FND-0004 (rule shared in BaseDataManager)."""
+        return self._next_id_from(record.get("item_id") for record in records)
+
