@@ -98,6 +98,16 @@ class TestItemHierarchy(unittest.TestCase):
         self.assertIsInstance(changed, LostItem)
         self.assertEqual((item.colour.text, changed.colour.text), ("black", "red"))
 
+    def test_lost_item_has_no_value_assessment(self):                                   # T48
+        reply = {**SAMPLE_AI_REPLY, "estimated_value_sgd": 5000, "sensitive": False,
+                 "value_category": "HIGH_VALUE", "valuation_reason": "expensive"}
+        item = Item.from_ai_response("lost", reply)
+        self.assertIsInstance(item, LostItem)
+        for key in ("estimated_value_sgd", "sensitive", "valuation_reason", "value_category"):
+            self.assertNotIn(key, item.to_dict())
+        self.assertFalse(hasattr(item, "value_category"))
+        self.assertFalse(hasattr(item, "assessment"))
+
     def test_missing_or_unreadable_date(self):
         self.assertIsNone(LostItem().occurred_at)
         self.assertIsNone(LostItem({"datetime": ExtractedField("10 Oct 3pm", 0.5)}).occurred_at)
@@ -154,6 +164,37 @@ class TestFoundItem(unittest.TestCase):
     def test_invalid_status_rejected(self):
         with self.assertRaises(ValueError):
             FoundItem(status="lost")
+            
+    def test_phase1_record_is_not_assessed(self):                                       # T9
+        item = FoundItem.from_dict(PHASE1_RECORD)
+        self.assertIsNone(item.assessment)
+        self.assertIsNone(item.value_category)
+        self.assertFalse(item.is_high_value)
+        saved = item.to_dict()
+        for key, value in PHASE1_RECORD.items():
+            self.assertEqual(saved[key], value, key)
+        for key in ("estimated_value_sgd", "sensitive", "valuation_reason", "value_category", "escalated_at"):
+            self.assertNotIn(key, saved)
+
+    def test_escalation_time_changes_only_through_mark_escalated(self):                 # T10
+        item = FoundItem.from_dict(PHASE1_RECORD)
+        self.assertIsNone(item.escalated_datetime())
+        item.mark_escalated(datetime(2026, 11, 16, 18, 0, 42))
+        self.assertEqual(item.escalated_at, "2026-11-16T18:00")
+        self.assertEqual(item.escalated_datetime(), datetime(2026, 11, 16, 18, 0))
+        self.assertIsNone(FoundItem(escalated_at="not a date").escalated_datetime())
+        self.assertIsNone(FoundItem.from_dict({**PHASE1_RECORD, "escalated_at": 5}).escalated_at)
+        with self.assertRaises(AttributeError):
+            item.assessment = None
+        with self.assertRaises(AttributeError):
+            item.escalated_at = "2026-11-17T09:00"
+
+    def test_is_overdue_is_strictly_more_than_the_days(self):
+        item = FoundItem(item_id="FND-0001", reported_at="2026-11-09T18:00")
+        self.assertFalse(item.is_overdue(datetime(2026, 11, 16, 18, 0), 7))
+        self.assertTrue(item.is_overdue(datetime(2026, 11, 16, 18, 0, 1), 7))
+        self.assertFalse(FoundItem(reported_at="not a date").is_overdue(datetime(2030, 1, 1), 7))
+        self.assertFalse(FoundItem().is_overdue(datetime(2030, 1, 1), 7))
 
 class TestItemMatch(unittest.TestCase):
     def test_refers_to_found_item_with_score_and_decision(self):
