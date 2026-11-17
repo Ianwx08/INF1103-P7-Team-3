@@ -6,11 +6,14 @@ OOP concepts shown here:
 - Encapsulation: fields live in protected attributes and are read through properties; a found
   item's status can only change through archive().
 - Composition: an Item is built from ExtractedField objects and one AIFlags object that it owns.
+- Composition: a FoundItem owns its ValueAssessment (or None if it was never assessed).
+- Aggregation: an ItemMatch refers to a FoundItem that it does not own.
 
 Everything is re-exported here, so callers can write `from models import FoundItem`.
 """
 from models.ai_flags import AIFlags
 from models.constants import DATETIME_FORMAT, FIELD_NAMES
+from models.email_message import EmailMessage
 from models.extracted_field import ExtractedField
 from models.found_item import FoundItem
 from models.item import Item
@@ -18,6 +21,7 @@ from models.item_match import ItemMatch
 from models.lost_item import LostItem
 from models.match_decision import MatchDecision
 from models.stored_items_overview import StoredItemsOverview
+from models.value_assessment import ValueAssessment
 
 __all__ = [
     "DATETIME_FORMAT",
