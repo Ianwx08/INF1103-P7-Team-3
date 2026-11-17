@@ -1,7 +1,9 @@
 """LogicManager: Runs the report, search, overview and archiving workflows."""
 from __future__ import annotations
+
 from datetime import datetime
 from typing import Callable, Sequence
+
 from managers.base.base_ai_manager import BaseAIManager
 from managers.base.base_data_manager import BaseDataManager
 from managers.base.base_io_manager import BaseIOManager
@@ -34,6 +36,7 @@ class LogicManager:
                  corrections: Sequence[ItemCorrection] | None = None,
                  clock: Callable[[], datetime] = datetime.now,
                  overview: OverviewService | None = None) -> None:
+        """The three managers it uses, plus optional services, rules, corrections and clock (defaults if None)."""
         self._ai, self._data, self._io = ai, data, io
         self._matching = matching or MatchingService()
         self._overview = overview or OverviewService()
@@ -108,7 +111,7 @@ class LogicManager:
 
     # ---- menu option 1 ----
     def report_lost_item(self) -> None:
-        """Search for a lost item and let the user claim a match."""
+        """Search for a lost item and let the user claim a match. Nothing about the search is saved."""
         lost = self.process_report("lost")
         if lost is None:
             return
@@ -133,7 +136,7 @@ class LogicManager:
 
     # ---- menu option 2 ----
     def report_found_item(self) -> None:
-        """Report a found item, warn about duplicates, and save it."""
+        """Report a found item, warn about duplicates, save it and show its value category."""
         found = self.process_report("found")
         if found is None:
             return
@@ -144,7 +147,10 @@ class LogicManager:
         stored = self._data.add(found)
         self._io.show_message("\nThank you! Your report has been saved:")
         self._io.show_item(stored)
-
+        if stored.assessment is not None:
+            value = stored.assessment.estimated_value_sgd
+            shown = "unknown" if value is None else f"S${value:,.2f} (AI estimate)"
+            self._io.show_message(f"Category: {stored.value_category}. Value: {shown}.")
 
     # ---- menu option 3 ----
     def view_stored_items(self) -> None:
@@ -166,7 +172,10 @@ class LogicManager:
 
     # ---- before every menu ----
     def archive_expired(self) -> list[FoundItem]:
-        """Archive active found items older than 7 days; returns the ones archived."""
+        """Archive active ordinary found items reported more than 7 days ago; returns the ones archived.
+
+        HIGH_VALUE items stay active (they are escalated to the admins instead).
+        """
         expired = self._matching.expired(self._data.load_all(), now=self._clock())
         for item in expired:
             item.archive()
