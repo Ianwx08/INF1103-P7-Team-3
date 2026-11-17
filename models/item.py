@@ -8,6 +8,7 @@ from typing import Any, Mapping
 from models.ai_flags import AIFlags
 from models.constants import DATETIME_FORMAT, FIELD_NAMES
 from models.extracted_field import ExtractedField
+from models.value_assessment import ValueAssessment
 
 
 class Item(ABC):
@@ -133,7 +134,10 @@ class Item(ABC):
         kinds: dict[str, type[Item]] = {"lost": LostItem, "found": FoundItem}
         if report_type not in kinds:
             raise ValueError(f"report_type must be 'lost' or 'found', not {report_type!r}")
-        return kinds[report_type](Item.fields_from_dict(data), AIFlags.from_dict(data))
+        fields, flags = Item.fields_from_dict(data), AIFlags.from_dict(data)
+        if report_type == "found":       # a found item keeps Gemini's value assessment
+            return FoundItem(fields, flags, assessment=ValueAssessment.from_dict(data))
+        return kinds[report_type](fields, flags)
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({self.description.text!r}, type={self.item_type.text!r})"
