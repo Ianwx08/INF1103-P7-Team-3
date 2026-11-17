@@ -1,7 +1,7 @@
 """MatchingService: Finds matches for lost reports, duplicate found reports and expired items."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Sequence
 
 from managers.logic.decision_engine import DecisionEngine
@@ -42,8 +42,12 @@ class MatchingService:
         return [item for item in existing if self._scorer.score(new_item, item, directional=False) >= threshold]
 
     def expired(self, items: Sequence[FoundItem], now: datetime | None = None,
-                days: int = ARCHIVE_AFTER_DAYS) -> list[FoundItem]:
-        """Active items reported more than `days` ago."""
-        cutoff = (now or datetime.now()) - timedelta(days=days)
-        return [item for item in items if item.is_active()
-                and item.reported_datetime() is not None and item.reported_datetime() < cutoff]
+                    days: int = ARCHIVE_AFTER_DAYS) -> list[FoundItem]:
+            """Active ordinary items reported more than `days` ago. HIGH_VALUE items are never archived.
+    
+            Items that were never assessed count as ordinary. Uses the report time, not the date found.
+            """
+            moment = now or datetime.now()
+            return [item for item in items
+                    if item.is_active() and not item.is_high_value and item.is_overdue(moment, days)]
+    
