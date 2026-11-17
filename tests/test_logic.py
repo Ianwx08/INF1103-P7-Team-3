@@ -188,6 +188,15 @@ class TestMatchingService(unittest.TestCase):
                  stored(ai_reply(), "BROKEN", "not a date")]
         self.assertEqual([i.item_id for i in self.matching.expired(items, now=now)], ["OLD"])
 
+    def test_high_value_items_never_expire(self):                                       # T28
+        now = datetime(2026, 10, 18, 12, 0)
+        found_item = SampleReplies.found_item
+        items = [found_item(2500, item_id="HIGH", reported_at="2026-09-18T12:00"),
+                 found_item(None, True, item_id="SENSITIVE", reported_at="2026-09-18T12:00"),
+                 found_item(50, item_id="ORDINARY", reported_at="2026-09-18T12:00"),
+                 stored(ai_reply(), "NOT_ASSESSED", "2026-09-18T12:00"),
+                 found_item(50, item_id="EXACT", reported_at="2026-10-11T12:00")]
+        self.assertEqual([i.item_id for i in self.matching.expired(items, now=now)], ["ORDINARY", "NOT_ASSESSED"])
 
 if __name__ == "__main__":
     unittest.main()
