@@ -1,11 +1,15 @@
-"""LostItem: An item someone has lost. Used for a one-time search and never stored."""
+"""LostItem: A lost-item search: the details matching uses. Never stored."""
 from __future__ import annotations
 
 from models.item import Item
 
 
 class LostItem(Item):
-    """An item someone has lost. Used for a one-time search and never stored."""
+    """A lost-item search: the details matching uses. Never stored.
+
+    It has the seven fields and Gemini's flags only. Gemini still returns a value assessment
+    with every reply (one schema), but a lost search does not keep it.
+    """
 
     @property
     def report_type(self) -> str:
