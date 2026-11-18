@@ -53,6 +53,7 @@ class PromptBuilder:
             f"usable information for its field, set that value to null. If the "
             f"item type changes, update item_description to match. Keep all "
             f"other fields unchanged, then re-evaluate colour_options, "
-            f"prohibited_item, item_recognised and location_specific and "
-            f"recompute missing_fields and overall_confidence."
+            f"prohibited_item, item_recognised, location_specific and the value "
+            f"assessment (estimated_value_sgd, sensitive, value_category, "
+            f"valuation_reason), and recompute missing_fields and overall_confidence."
         )
