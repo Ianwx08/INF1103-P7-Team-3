@@ -9,6 +9,8 @@ from dotenv import load_dotenv
 from managers.ai.gemini_ai_manager import GeminiAIManager
 from managers.base.base_io_manager import BaseIOManager
 from managers.data.data_manager_factory import DataManagerFactory
+from managers.logic.escalation_service import EscalationService
+from managers.email.brevo_email_manager import BrevoEmailManager
 from managers.io.console_io_manager import ConsoleIOManager
 from managers.logic.logic_manager import LogicManager
 
@@ -33,9 +35,13 @@ class LostAndFoundApp:
     def create_default(cls) -> "LostAndFoundApp":
         """The real app: Gemini AI, the configured storage (SQLite database by default), console IO."""
         io = ConsoleIOManager()
-        data = DataManagerFactory(notify=io.show_message).create()
+        factory = DataManagerFactory(notify=io.show_message)
+        data = factory.create()
         logic = LogicManager(ai=GeminiAIManager(), data=data, io=io)
-        return cls(io, logic)
+        app = cls(io, logic)
+        # Once per start: email the admins about high-value found items left unclaimed too long.
+        EscalationService(data, BrevoEmailManager(io.show_message), io.show_message).check()
+        return app
 
     def run(self) -> None:
         """Show the menu until the user chooses Exit. File errors become messages, not crashes."""
