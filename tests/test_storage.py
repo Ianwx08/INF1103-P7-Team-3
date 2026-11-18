@@ -8,18 +8,28 @@ import os
 import sqlite3
 import tempfile
 import unittest
+from datetime import datetime
 from unittest import mock
 
+from managers.ai.mock_ai_manager import MockAIManager
 from managers.base.base_data_manager import BaseDataManager
+from managers.base.sequential_id import SequentialId
 from managers.data.data_manager_factory import DataManagerFactory
 from managers.data.data_migrator import DataMigrator
 from managers.data.found_item_row_mapper import FoundItemRowMapper
 from managers.data.json_data_manager import JsonDataManager
+from managers.data.sqlite_column_migrator import SqliteColumnMigrator
 from managers.data.sqlite_data_manager import SqliteDataManager
+from managers.data.sqlite_database import SqliteDatabase
+from managers.logic.logic_manager import LogicManager
 from models import FoundItem, Item
-from tests.helpers import SampleReplies
+from tests.helpers import SampleReplies, ScriptedIOManager
 
 ai_reply = SampleReplies.ai_reply
+found_reply = SampleReplies.found_reply
+found_item = SampleReplies.found_item
+VALUATION_KEYS = ("estimated_value_sgd", "sensitive", "valuation_reason", "value_category")
+STORAGE_NOW = datetime(2026, 11, 16, 18, 0)
 
 
 class StorageSamples:
@@ -103,6 +113,47 @@ class DataContract:
         self.assertFalse(self.data.delete("FND-0001"))
         self.assertEqual(self.data.load_all(), [])
 
+    def test_value_assessment_survives_a_new_manager(self):                              # T17
+        items = [self.data.add(found_item(2500)), self.data.add(found_item(None, True)),
+                 self.data.add(found_item(50))]
+        reloaded = self.make(self.folder).load_all()
+        self.assertEqual([i.to_dict() for i in reloaded], [i.to_dict() for i in items])
+        self.assertEqual([(i.assessment, i.value_category) for i in reloaded],
+                         [(i.assessment, i.value_category) for i in items])
+        self.assertEqual([i.value_category for i in reloaded], ["HIGH_VALUE", "HIGH_VALUE", "ORDINARY"])
+
+    def test_update_keeps_the_assessment_and_saves_the_escalation_time(self):          # T18
+        item = self.data.add(found_item(2500))
+        item.archive()
+        self.data.update(item)
+        self.assertEqual(self.make(self.folder).get(item.item_id).assessment, item.assessment)
+        item.mark_escalated(STORAGE_NOW)
+        self.data.update(item)
+        reloaded = self.make(self.folder).get(item.item_id)
+        self.assertEqual(reloaded.escalated_at, "2026-11-16T18:00")
+        self.assertEqual(reloaded.assessment, item.assessment)
+
+    def test_item_without_assessment_stays_unassessed(self):                           # T19
+        plain = Item.from_ai_response("found", {key: value for key, value in ai_reply().items()
+                                                if key not in VALUATION_KEYS})
+        self.assertIsNone(plain.assessment)
+        stored = self.data.add(plain)
+        reloaded = self.make(self.folder).get(stored.item_id)
+        self.assertIsNone(reloaded.assessment)
+        self.assertIsNone(reloaded.escalated_at)
+        raw = self.raw_valuation(stored.item_id)
+        self.assertTrue(all(value is None for value in raw.values()), raw)
+
+    def test_re_assessed_value_after_a_follow_up_is_saved(self):                       # T20
+        ai = MockAIManager([found_reply(300, colour=None, missing=["item_colour"]), found_reply(1500)],
+                           notify=lambda m: None)
+        io = ScriptedIOManager(["black Samsung phone", "yesterday 3pm", "SIT Punggol food court", "y", "black"])
+        LogicManager(ai, self.data, io, clock=lambda: datetime(2026, 10, 14, 12, 0)).report_found_item()
+        stored = self.make(self.folder).load_all()
+        self.assertEqual(len(stored), 1)
+        self.assertEqual(stored[0].assessment.estimated_value_sgd, 1500)
+        self.assertEqual(stored[0].value_category, "HIGH_VALUE")
+
     def test_unreadable_store_is_backed_up(self):
         self.data.add(found())
         with open(self.store_path(), "w", encoding="utf-8") as file:
@@ -119,7 +170,14 @@ class TestJsonContract(DataContract, unittest.TestCase):
 
     def store_path(self):
         return self.data.file_path
-
+    
+    def raw_valuation(self, item_id):
+        """The stored record's valuation keys (absent keys read as None)."""
+        with open(self.data.file_path, encoding="utf-8") as file:
+            record = next(r for r in json.load(file) if r["item_id"] == item_id)
+        self.assertFalse(set(VALUATION_KEYS + ("escalated_at",)) & set(record))
+        return {key: record.get(key) for key in VALUATION_KEYS + ("escalated_at",)}
+    
 
 class TestSqliteContract(DataContract, unittest.TestCase):
     def make(self, folder):
@@ -128,6 +186,17 @@ class TestSqliteContract(DataContract, unittest.TestCase):
     def store_path(self):
         return self.data.db_path
 
+    def raw_valuation(self, item_id):
+        """The row's valuation and escalation columns."""
+        db = sqlite3.connect(self.data.db_path)
+        try:
+            columns = VALUATION_KEYS + ("escalated_at",)
+            row = db.execute(f"SELECT {', '.join(columns)} FROM found_items WHERE item_id = ?",
+                             (item_id,)).fetchone()
+        finally:
+            db.close()
+        return dict(zip(columns, row))
+    
 
 class TestSqliteDataManager(unittest.TestCase):
     def setUp(self):
@@ -166,6 +235,15 @@ class TestSqliteDataManager(unittest.TestCase):
         self.assertEqual(self.data.load_all()[0].description.text, attack)
         self.data.delete(attack)
         self.assertEqual(len(self.data.load_all()), 1)
+
+    def test_database_rejects_an_invalid_value_category(self):                           # T25
+        self.data.add(found_item(2500))
+        with self.assertRaises(sqlite3.IntegrityError):
+            db = sqlite3.connect(self.path)
+            try:
+                db.execute("UPDATE found_items SET value_category = 'x'")
+            finally:
+                db.close()
 
     def test_database_rejects_an_invalid_status(self):
         self.data.load_all()
@@ -216,6 +294,120 @@ class TestRowMapper(unittest.TestCase):
         self.assertEqual(json.loads(row["colour_options"]), ["red", "blue"])
         self.assertEqual(mapper.from_row(row).to_dict(), item.to_dict())
 
+    def test_round_trip_of_the_value_assessment(self):                                  # T26
+        mapper = FoundItemRowMapper()
+        assessed = found_item(None, True, item_id="FND-0001", reported_at="2026-11-01T09:30")
+        assessed.mark_escalated(STORAGE_NOW)
+        row = mapper.to_row(assessed)
+        self.assertEqual((row["sensitive"], row["value_category"], row["escalated_at"]),
+                         (1, "HIGH_VALUE", "2026-11-16T18:00"))
+        self.assertEqual(mapper.from_row(row).to_dict(), assessed.to_dict())
+        plain = FoundItem(assessed.fields, assessed.flags, "FND-0002", "2026-11-01T09:30")
+        row = mapper.to_row(plain)
+        self.assertEqual([row[c] for c in FoundItemRowMapper.VALUE_COLUMNS], [None] * 4)
+        self.assertEqual(mapper.from_row(row).to_dict(), plain.to_dict())
+
+
+class TestSqliteMigration(unittest.TestCase):
+    """An existing database made before the value columns existed is upgraded in place."""
+
+    OLD_SCHEMA = """
+        CREATE TABLE found_items (
+            item_id                      TEXT PRIMARY KEY,
+            report_type                  TEXT NOT NULL DEFAULT 'found',
+            reported_at                  TEXT,
+            status                       TEXT NOT NULL DEFAULT 'active'
+                                         CHECK (status IN ('active', 'archived')),
+            item_description             TEXT,
+            item_description_confidence  REAL NOT NULL DEFAULT 0,
+            item_type                    TEXT,
+            item_type_confidence         REAL NOT NULL DEFAULT 0,
+            item_colour                  TEXT,
+            item_colour_confidence       REAL NOT NULL DEFAULT 0,
+            item_brand                   TEXT,
+            item_brand_confidence        REAL NOT NULL DEFAULT 0,
+            item_unique_info             TEXT,
+            item_unique_info_confidence  REAL NOT NULL DEFAULT 0,
+            "datetime"                   TEXT,
+            datetime_confidence          REAL NOT NULL DEFAULT 0,
+            location                     TEXT,
+            location_confidence          REAL NOT NULL DEFAULT 0,
+            colour_options               TEXT NOT NULL DEFAULT '[]',
+            prohibited_item              INTEGER NOT NULL DEFAULT 0,
+            item_recognised              INTEGER NOT NULL DEFAULT 1,
+            location_specific            INTEGER NOT NULL DEFAULT 1,
+            missing_fields               TEXT NOT NULL DEFAULT '[]',
+            overall_confidence           REAL NOT NULL DEFAULT 0
+        );
+        CREATE INDEX idx_found_items_status ON found_items (status);
+        INSERT INTO found_items (item_id, reported_at, status, item_description, item_description_confidence,
+                                 item_type, item_type_confidence, "datetime", datetime_confidence,
+                                 colour_options, overall_confidence)
+            VALUES ('FND-0001', '2026-10-10T10:00', 'active', 'old phone', 0.9, 'phone', 0.9,
+                    '2026-10-09T15:00', 0.9, '["black"]', 0.9),
+                   ('FND-0002', '2026-10-01T10:00', 'archived', 'old wallet', 0.8, 'wallet', 0.8,
+                    NULL, 0.0, '[]', 0.7);
+    """
+
+    def setUp(self):
+        self.path = os.path.join(tempfile.mkdtemp(), "found_items.db")
+        db = sqlite3.connect(self.path)
+        try:
+            db.executescript(self.OLD_SCHEMA)
+            db.commit()
+        finally:
+            db.close()
+
+    def query(self, sql):
+        db = sqlite3.connect(self.path)
+        try:
+            return db.execute(sql).fetchall()
+        finally:
+            db.close()
+
+    def columns(self):
+        return tuple(row[1] for row in self.query("PRAGMA table_info(found_items)"))
+
+    def open(self):
+        return SqliteDataManager(self.path, notify=lambda m: None)
+
+    def test_old_rows_keep_every_value_and_gain_the_columns(self):                     # T21
+        self.assertEqual(len(self.columns()), 24)
+        items = self.open().load_all()
+        self.assertEqual([(i.item_id, i.status, i.description.text, i.reported_at) for i in items],
+                         [("FND-0001", "active", "old phone", "2026-10-10T10:00"),
+                          ("FND-0002", "archived", "old wallet", "2026-10-01T10:00")])
+        self.assertEqual(items[0].flags.colour_options, ("black",))
+        self.assertTrue(all(i.assessment is None and i.escalated_at is None for i in items))
+        self.assertEqual(self.columns(), FoundItemRowMapper.COLUMNS)
+
+    def test_reopening_is_safe_and_new_items_are_assessed(self):                       # T22
+        for _ in range(3):
+            self.open().load_all()
+        self.assertEqual(self.columns(), FoundItemRowMapper.COLUMNS)
+        new = self.open().add(found_item(2500))
+        items = self.open().load_all()
+        self.assertEqual(len(items), 3)
+        self.assertEqual(items[-1].item_id, new.item_id)
+        self.assertEqual(items[-1].value_category, "HIGH_VALUE")
+
+    def test_migrator_on_an_up_to_date_table_and_rollback_on_failure(self):            # T24
+        migrator = SqliteColumnMigrator(SqliteDataManager.TABLE, SqliteDataManager.ADDED_COLUMNS)
+        database = SqliteDatabase(self.path, "SELECT 1;", migrator=migrator)
+
+        def fail(db):
+            raise RuntimeError("crash after the migration")
+
+        with self.assertRaises(RuntimeError):
+            database.run(fail)
+        self.assertEqual(len(self.columns()), 24)                      # rolled back with the action
+        self.assertEqual(len(self.query("SELECT * FROM found_items")), 2)
+        self.assertEqual(database.run(migrator.apply), [])             # the next run migrates...
+        self.assertEqual(self.columns(), FoundItemRowMapper.COLUMNS)
+        self.assertEqual(database.run(migrator.apply), [])             # ...and up to date adds nothing
+        added = SqliteColumnMigrator("found_items", {"extra": "TEXT"})
+        self.assertEqual(SqliteDatabase(self.path, "SELECT 1;").run(added.apply), ["extra"])
+
 
 class TestDataMigrator(unittest.TestCase):
     def setUp(self):
@@ -231,6 +423,14 @@ class TestDataMigrator(unittest.TestCase):
         self.assertEqual(DataMigrator(self.source, self.target).migrate(), 2)
         self.assertEqual([i.to_dict() for i in self.target.load_all()],
                          [i.to_dict() for i in self.source.load_all()])
+
+    def test_assessment_and_escalation_time_are_imported(self):                        # T27
+        item = self.source.add(found_item(2500))
+        item.mark_escalated(STORAGE_NOW)
+        self.source.update(item)
+        self.assertEqual(DataMigrator(self.source, self.target).migrate(), 1)
+        copied = self.target.get(item.item_id)
+        self.assertEqual((copied.assessment, copied.escalated_at), (item.assessment, "2026-11-16T18:00"))
 
     def test_target_with_items_is_left_alone(self):
         self.source.add(found())
@@ -281,6 +481,17 @@ class TestDataManagerFactory(unittest.TestCase):
             self.assertIsInstance(self.factory().create(), SqliteDataManager)
         self.assertIn("Could not import", self.notes[0])
         self.assertTrue(os.path.exists(os.path.join(self.folder, "found_items.json")))
+
+
+class TestSequentialId(unittest.TestCase):                                              # T57
+    def test_next_number_ignores_other_ids(self):
+        ids = SequentialId("FND-")
+        self.assertEqual(ids.next_after([]), "FND-0001")
+        self.assertEqual(ids.next_after(["FND-0002", "FND-DEMO-001", "ABC-0009", None]), "FND-0003")
+
+    def test_found_items_after_demo_ids(self):
+        self.assertEqual(BaseDataManager._next_id_from(["FND-DEMO-001", "FND-DEMO-013"]), "FND-0001")
+        self.assertEqual(BaseDataManager._next_id_from(["FND-0003", "XYZ-0008"]), "FND-0004")
 
 
 if __name__ == "__main__":

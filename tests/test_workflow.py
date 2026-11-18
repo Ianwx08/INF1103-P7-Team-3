@@ -7,20 +7,24 @@ import tempfile
 import unittest
 from datetime import datetime
 from unittest import mock
+
 from main import LostAndFoundApp
 from managers.ai.mock_ai_manager import MockAIManager
 from managers.base.base_data_manager import BaseDataManager
 from managers.data.json_data_manager import JsonDataManager
+from managers.data.sqlite_data_manager import SqliteDataManager
 from managers.logic.logic_manager import LogicManager
 from models import FoundItem, Item
 from tests.helpers import SampleReplies, ScriptedIOManager
 
 ai_reply = SampleReplies.ai_reply
+found_item = SampleReplies.found_item
 
 NOW = datetime(2026, 10, 14, 12, 0)
 PAST = "2026-10-13T15:00"
 FUTURE = "2026-10-21T15:00"
 DETAILS = ["black Samsung phone", "yesterday 3pm", "SIT Punggol food court", "y"]
+
 
 class WorkflowTestCase(unittest.TestCase):
     def setUp(self):
@@ -41,6 +45,7 @@ class WorkflowTestCase(unittest.TestCase):
         self.ai.queue(*replies)
         self.io.add_answers(*answers)
         return self.logic.process_report(report_type)
+
 
 class TestProcessReport(WorkflowTestCase):
     def test_clear_report_needs_no_follow_up(self):
@@ -113,6 +118,7 @@ class TestProcessReport(WorkflowTestCase):
         replies = [ai_reply(when=PAST, colour=None), ValueError("down")]
         self.assertIsNone(self.run_report("found", replies, DETAILS + ["black"]))
         self.assertEqual(self.data.load_all(), [])
+
 
 class TestFoundAndLostWorkflows(WorkflowTestCase):
     def test_found_item_is_saved(self):
@@ -199,6 +205,38 @@ class TestFoundAndLostWorkflows(WorkflowTestCase):
         self.assertEqual([i.item_id for i in self.data.get_active()], [new.item_id])
         self.assertEqual(self.logic.archive_expired(), [])     # nothing archived twice
 
+    def test_archiving_keeps_high_value_items_and_uses_the_report_time(self):         # T29, T30
+        yesterday, nine_days_ago = "2026-10-13T15:00", "2026-10-05T12:00"
+        for name, data in self.both_backends():
+            with self.subTest(backend=name):
+                logic = LogicManager(self.ai, data, self.io, clock=lambda: NOW)
+                for item in (found_item(2500, item_id="FND-0001", reported_at=nine_days_ago, when=yesterday),
+                             found_item(None, True, item_id="FND-0002", reported_at=nine_days_ago, when=yesterday),
+                             found_item(50, item_id="FND-0003", reported_at=nine_days_ago, when=yesterday),
+                             found_item(50, item_id="FND-0004", reported_at="2026-10-12T12:00",
+                                        when="2026-09-14T12:00")):
+                    data.add(item)
+                self.assertEqual([i.item_id for i in logic.archive_expired()], ["FND-0003"])
+                self.assertEqual([i.item_id for i in data.get_active()], ["FND-0001", "FND-0002", "FND-0004"])
+
+    def test_old_high_value_item_is_listed_searchable_and_claimable(self):             # T31
+        self.data.add(found_item(2500, item_id="FND-0001", reported_at="2026-10-05T12:00", when=PAST))
+        self.logic.archive_expired()
+        self.io.add_answers("1")
+        self.logic.view_stored_items()
+        self.assertIn("[FND-0001]", self.io.text)
+        self.ai.queue(ai_reply("lost", when="2026-10-13T14:00"))
+        self.io.add_answers(*DETAILS, "1", "y")
+        self.logic.report_lost_item()
+        self.assertIn("Claimed. Quote reference FND-0001", self.io.text)
+        self.assertEqual(self.data.load_all(), [])
+
+    def both_backends(self):
+        folder = tempfile.mkdtemp()
+        return [("json", JsonDataManager(os.path.join(folder, "found_items.json"), notify=lambda m: None)),
+                ("sqlite", SqliteDataManager(os.path.join(folder, "found_items.db"), notify=lambda m: None))]
+
+
 class BrokenDataManager(BaseDataManager):
     """A data manager whose disk always fails, to test error handling."""
 
@@ -213,6 +251,7 @@ class BrokenDataManager(BaseDataManager):
 
     def delete(self, item_id):
         raise OSError("disk unavailable")
+
 
 class TestApp(WorkflowTestCase):
     def test_menu_loop_found_then_lost_then_exit(self):
@@ -234,6 +273,16 @@ class TestApp(WorkflowTestCase):
         self.assertIn("Could not read or save the data file: disk unavailable. Nothing was saved.", self.io.text)
         self.assertEqual(self.io.text.count("Could not read or save the data file"), 2)   # report + overview
 
+    def test_saved_found_item_shows_its_category(self):
+        self.ai.queue(SampleReplies.found_reply(2500, when=PAST))
+        self.io.add_answers(*DETAILS)
+        self.logic.report_found_item()
+        self.assertIn("Category: HIGH_VALUE. Value: S$2,500.00 (AI estimate).", self.io.text)
+        self.ai.queue(SampleReplies.found_reply(None, True, item_type="student card", description="SIT card",
+                                                when=PAST))
+        self.io.add_answers(*DETAILS)
+        self.logic.report_found_item()
+        self.assertIn("Category: HIGH_VALUE. Value: unknown.", self.io.text)
 
     def test_menu_view_stored_items(self):
         self.store(when=PAST)

@@ -8,6 +8,7 @@ from models.found_item import FoundItem
 from models.item import Item
 from models.value_assessment import ValueAssessment
 
+
 class SampleReplies:
     """Hard-coded sample Gemini replies for offline tests (no API calls)."""
 
@@ -39,6 +40,10 @@ class SampleReplies:
             "location_specific": specific,
             "missing_fields": list(missing),
             "overall_confidence": 0.9,
+            "estimated_value_sgd": 800,
+            "sensitive": False,
+            "value_category": "ORDINARY",
+            "valuation_reason": "Rough model-based estimate for offline testing.",
         }
 
     @staticmethod

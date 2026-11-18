@@ -103,6 +103,15 @@ class TestJsonDataManager(unittest.TestCase):
         item = self.data.load_all()[0]
         self.assertEqual((item.item_id, item.flags.location_specific), ("FND-0007", True))
 
+    def test_records_without_valuation_keys_load_as_not_assessed(self):
+        record = {**ai_reply(), "item_id": "FND-0007", "reported_at": "2026-10-10T01:39", "status": "active"}
+        for key in ("estimated_value_sgd", "sensitive", "valuation_reason", "value_category"):
+            del record[key]
+        with open(self.path, "w", encoding="utf-8") as file:
+            json.dump([record], file)
+        item = self.data.load_all()[0]
+        self.assertEqual((item.assessment, item.value_category, item.is_high_value), (None, None, False))
+    
     def test_file_path_is_read_only(self):
         with self.assertRaises(AttributeError):
             self.data.file_path = "elsewhere.json"
