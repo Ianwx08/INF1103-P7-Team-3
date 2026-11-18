@@ -27,3 +27,6 @@ jobs:
 
       - name: Check the sample data loads inside the container
         run: docker run --rm --network none -e DATA_DIR=/tmp/data lost-and-found python seed_data.py
+      
+      - name: Check the escalation demo data loads inside the container
+        run: docker run --rm --network none -e DATA_DIR=/tmp/data lost-and-found python seed_escalation_demo.py
