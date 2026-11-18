@@ -1,14 +1,15 @@
-"""BaseDataManager: Stores found items. Lost reports are never stored."""
+"""BaseDataManager: Found-item storage (the only thing the app stores)."""
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from typing import Iterable
 
+from managers.base.sequential_id import SequentialId
 from models.found_item import FoundItem
 
 
 class BaseDataManager(ABC):
-    """Stores found items. Lost reports are never stored."""
+    """Stores found items, with their value assessment and last escalation time. Lost searches are never stored."""
 
     ID_PREFIX = "FND-"   # every store gives IDs like FND-0001
 
@@ -50,10 +51,4 @@ class BaseDataManager(ABC):
 
         One rule for every store, so JSON and the database number items the same way.
         """
-        highest = 0
-        for item_id in existing_ids:
-            item_id = str(item_id or "")
-            suffix = item_id[len(cls.ID_PREFIX):]
-            if item_id.startswith(cls.ID_PREFIX) and suffix.isdigit():
-                highest = max(highest, int(suffix))
-        return f"{cls.ID_PREFIX}{highest + 1:04d}"
+        return SequentialId(cls.ID_PREFIX).next_after(existing_ids)

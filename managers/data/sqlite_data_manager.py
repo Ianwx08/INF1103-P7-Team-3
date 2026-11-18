@@ -9,6 +9,8 @@ from typing import Callable, TypeVar
 from managers.base.base_data_manager import BaseDataManager
 from managers.data.constants import DEFAULT_DATA_DIR
 from managers.data.found_item_row_mapper import FoundItemRowMapper
+from managers.data.sqlite_column_migrator import SqliteColumnMigrator
+from managers.data.sqlite_database import SqliteDatabase
 from models.constants import DATETIME_FORMAT
 from models.found_item import FoundItem
 
@@ -24,6 +26,10 @@ class SqliteDataManager(BaseDataManager):
     - Database errors are raised as OSError, the same error type JsonDataManager raises,
       so the app's "Could not read or save the data file" handling works unchanged (LSP).
     - A file that is not a valid database is renamed to <file>.corrupt-<time>, like the JSON store.
+    - An older database gains the newer columns (value assessment, escalated_at) automatically
+      on first use; existing rows keep every value.
+    Composition: owns a SqliteDatabase, which does the file handling and transactions, and gives
+    it a SqliteColumnMigrator for the columns in ADDED_COLUMNS.
     """
 
     TABLE = "found_items"
@@ -53,25 +59,39 @@ class SqliteDataManager(BaseDataManager):
             item_recognised              INTEGER NOT NULL DEFAULT 1,
             location_specific            INTEGER NOT NULL DEFAULT 1,
             missing_fields               TEXT NOT NULL DEFAULT '[]',
-            overall_confidence           REAL NOT NULL DEFAULT 0
+            overall_confidence           REAL NOT NULL DEFAULT 0,
+            estimated_value_sgd          REAL,
+            sensitive                    INTEGER CHECK (sensitive IN (0, 1)),
+            valuation_reason             TEXT,
+            value_category               TEXT CHECK (value_category IN ('HIGH_VALUE', 'ORDINARY')),
+            escalated_at                 TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_found_items_status ON found_items (status);
         CREATE INDEX IF NOT EXISTS idx_found_items_type ON found_items (item_type);
     """
+     # Columns added after the first version of the table. Databases made before then gain them
+    # on first use (SqliteColumnMigrator); no index on them here, because SCHEMA runs before that.
+    ADDED_COLUMNS = {
+        "estimated_value_sgd": "REAL",
+        "sensitive": "INTEGER CHECK (sensitive IN (0, 1))",
+        "valuation_reason": "TEXT",
+        "value_category": "TEXT CHECK (value_category IN ('HIGH_VALUE', 'ORDINARY'))",
+        "escalated_at": "TEXT",
+    }
 
     def __init__(self, db_path: str | None = None, notify: Callable[[str], None] = print,
                  mapper: FoundItemRowMapper | None = None) -> None:
         """Use db_path, or DATA_DIR/found_items.db. notify shows warnings (default: print)."""
         if db_path is None:
             db_path = os.path.join(os.getenv("DATA_DIR", DEFAULT_DATA_DIR), "found_items.db")
-        self.__db_path = db_path
-        self._notify = notify
+        self._database = SqliteDatabase(db_path, self.SCHEMA, notify,
+                                        SqliteColumnMigrator(self.TABLE, self.ADDED_COLUMNS))
         self._mapper = mapper or FoundItemRowMapper()
 
     @property
     def db_path(self) -> str:
         """Where the database file is (read-only)."""
-        return self.__db_path
+        return self._database.db_path
 
     # ---- BaseDataManager interface ----
     def load_all(self) -> list[FoundItem]:
@@ -124,41 +144,5 @@ class SqliteDataManager(BaseDataManager):
         return f'"{column}"'
 
     def _run(self, action: Callable[[sqlite3.Connection], T]) -> T:
-        """Run action in one transaction. Unreadable file -> backed up, then retried on a new one."""
-        try:
-            try:
-                return self._transaction(action)
-            except sqlite3.DatabaseError as error:
-                # Only a plain DatabaseError ("file is not a database", "malformed") means a corrupt
-                # file. Its subclasses are real failures that must not discard data: IntegrityError
-                # (e.g. duplicate ID), OperationalError (locked, cannot open), and so on.
-                if type(error) is not sqlite3.DatabaseError or not os.path.exists(self.__db_path):
-                    raise
-                self._backup_corrupt_file()
-                return self._transaction(action)
-        except sqlite3.Error as error:
-            raise OSError(f"database error: {error}") from error
-
-    def _transaction(self, action: Callable[[sqlite3.Connection], T]) -> T:
-        """Open the database, make sure the table exists, run action, commit (or roll back), close."""
-        os.makedirs(os.path.dirname(self.__db_path) or ".", exist_ok=True)
-        db = sqlite3.connect(self.__db_path, timeout=5, isolation_level=None)
-        db.row_factory = sqlite3.Row
-        try:
-            db.executescript(self.SCHEMA)
-            db.execute("BEGIN IMMEDIATE")      # lock for writing, so two app windows cannot clash
-            try:
-                result = action(db)
-            except BaseException:
-                db.execute("ROLLBACK")
-                raise
-            db.execute("COMMIT")
-            return result
-        finally:
-            db.close()
-
-    def _backup_corrupt_file(self) -> None:
-        """Rename an unreadable database to <file>.corrupt-<YYYYMMDDHHMMSS> so its data is kept."""
-        backup_path = f"{self.__db_path}.corrupt-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-        os.replace(self.__db_path, backup_path)
-        self._notify(f"Warning: found items database was unreadable. Backed up to {backup_path}")
+        """Run action in one transaction of the database file (see SqliteDatabase.run)."""
+        return self._database.run(action)
