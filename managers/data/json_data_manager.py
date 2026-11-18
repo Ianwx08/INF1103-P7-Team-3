@@ -20,7 +20,6 @@ class JsonDataManager(BaseDataManager):
     instead of being overwritten. The JSON shape is the same as Phase 1.
     """
 
-    ID_PREFIX = "FND-"   # IDs look like FND-0001
 
     def __init__(self, file_path: str | None = None,
                  notify: Callable[[str], None] = print) -> None:
