@@ -1,12 +1,13 @@
 """SchemaValidator: Checks a Gemini reply's keys, types and formats before any logic uses it."""
 from __future__ import annotations
+import math
 from datetime import datetime
 from typing import Any
 from managers.ai.constants import REPORT_TYPES
 from models.constants import DATETIME_FORMAT, FIELD_NAMES
+from models.value_assessment import ValueAssessment
 
 class SchemaValidator:
-
     def validate(self, data: Any) -> list[str]:
         """Return problems found; an empty list means reply is valid."""
         if not isinstance(data, dict):
@@ -49,6 +50,19 @@ class SchemaValidator:
 
         if not self._is_confidence(data.get("overall_confidence")):
             problems.append("overall_confidence must be a number between 0 and 1.")
+        # Value assessment: required in every reply, whatever report_type Gemini returned. The category 
+        # must follow the rule in ValueAssessment, so Gemini cannot label an item differently from its own estimate.
+        value = data.get("estimated_value_sgd")
+        valid_value = value is None or (type(value) in (int, float) and math.isfinite(value) and value >= 0)
+        if not valid_value or "estimated_value_sgd" not in data:
+            problems.append("estimated_value_sgd must be a finite nonnegative number or null.")
+        if type(data.get("sensitive")) is not bool:
+            problems.append("sensitive must be true or false.")
+        expected = ValueAssessment.category_for(value if valid_value else None, data.get("sensitive") is True)
+        if data.get("value_category") != expected:
+            problems.append("value_category must agree with sensitivity and the S$1,000 threshold.")
+        if not isinstance(data.get("valuation_reason"), str) or not data["valuation_reason"].strip():
+            problems.append("valuation_reason must explain the value assessment.")
         return problems
 
     def is_valid(self, data: Any) -> bool:

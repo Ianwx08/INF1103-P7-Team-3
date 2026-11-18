@@ -28,10 +28,15 @@ RESPONSE_SCHEMA = {
         "location_specific": {"type": "BOOLEAN"},
         "missing_fields": {"type": "ARRAY", "items": {"type": "STRING"}},
         "overall_confidence": {"type": "NUMBER"},
+        "estimated_value_sgd": {"type": "NUMBER", "nullable": True},
+        "sensitive": {"type": "BOOLEAN"},
+        "value_category": {"type": "STRING", "enum": ["HIGH_VALUE", "ORDINARY"]},
+        "valuation_reason": {"type": "STRING"},
     },
     "required": [
         "report_type", *FIELD_NAMES, "colour_options", "prohibited_item",
         "item_recognised", "location_specific", "missing_fields", "overall_confidence",
+        "estimated_value_sgd", "sensitive", "value_category", "valuation_reason",
     ],
 }
 
@@ -180,4 +185,23 @@ overall_confidence should represent your confidence in the entire
 extraction.
 
 Return only information matching the supplied JSON schema.
+
+VALUE ASSESSMENT (always include these fields):
+- estimated_value_sgd: a rough current monetary value in Singapore dollars, based
+  on the stated model, condition and quantity. Use a stated amount when available.
+  This field is explicitly allowed to be an estimate; use null if insufficient
+  information exists. Never invent identifying details or claim a verified appraisal.
+- sensitive: true for NRIC, passports, driver's licences, student IDs, credit/debit
+  cards, stored-value transport cards (e.g. EZ-Link, concession cards),
+  bank-related documents, access cards, keys with identifying information,
+  confidential documents, or items containing sensitive personal information.
+  Include sensitive contents of wallets/bags. Treat these as invaluable; do not
+  invent a large price to represent their sensitivity.
+- value_category: HIGH_VALUE if sensitive=true OR estimated_value_sgd >= 1000.
+  Otherwise ORDINARY. Electronics, jewellery, watches, luxury goods and cash
+  qualify by the same S$1,000 threshold; cheap electronics are not automatically
+  high value. Examples: S$1,000 laptop HIGH_VALUE; S$50 earbuds ORDINARY;
+  student ID HIGH_VALUE even with null monetary value; plain unlabelled keys ORDINARY.
+- valuation_reason: explain the rough estimate or insufficient information, and
+  any sensitivity. Re-evaluate this assessment after follow-up answers.
 """

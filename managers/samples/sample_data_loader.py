@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 from datetime import datetime, timedelta
@@ -11,6 +12,7 @@ from managers.ai.schema_validator import SchemaValidator
 from models.constants import DATETIME_FORMAT
 from models.found_item import FoundItem
 from models.item import Item
+from models.value_assessment import ValueAssessment
 
 DEFAULT_SAMPLE_FILE = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
@@ -21,12 +23,15 @@ class SampleDataLoader:
     """Reads the sample file and turns each entry into a schema-validated FoundItem.
 
     Entry keys: description, item_type, colour, location, found_days_ago (0-6), found_time ("HH:MM");
-    optional brand and unique_info (null if unknown).
+    optional brand and unique_info (null if unknown); optional estimated_value_sgd (number >= 0 or
+    null, default null) and sensitive (true/false, default false). Every sample carries a value
+    assessment, like a Gemini reply, so it passes the same schema check.
     """
 
     REQUIRED_KEYS = ("description", "item_type", "colour", "location", "found_days_ago", "found_time")
     TEXT_KEYS = ("description", "item_type", "colour", "location")
     OPTIONAL_KEYS = ("brand", "unique_info")
+    VALUATION_REASON = "Sample data: example estimate, not a Gemini assessment."
     CONFIDENCE = 0.95          # sample values are certain, like a clear report
     MAX_DAYS_AGO = 6           # older samples would be archived (7 days) as soon as they are loaded
     TIME_PATTERN = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
@@ -70,6 +75,13 @@ class SampleDataLoader:
         for key in self.OPTIONAL_KEYS:
             if entry.get(key) is not None and not isinstance(entry[key], str):
                 raise ValueError(f"Sample #{number}: {key} must be text or null.")
+        value = entry.get("estimated_value_sgd")
+        if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float))
+                                  or not math.isfinite(value) or value < 0):
+            raise ValueError(f"Sample #{number}: estimated_value_sgd must be a number or null.")
+        sensitive = entry.get("sensitive", False)
+        if not isinstance(sensitive, bool):
+            raise ValueError(f"Sample #{number}: sensitive must be true or false.")
 
         def field(value: str | None) -> dict[str, Any]:
             return {"value": value, "confidence": self.CONFIDENCE if value else 0.0}
@@ -89,6 +101,10 @@ class SampleDataLoader:
             "location_specific": True,
             "missing_fields": [],
             "overall_confidence": self.CONFIDENCE,
+            "estimated_value_sgd": value,
+            "sensitive": sensitive,
+            "value_category": ValueAssessment.category_for(value, sensitive),
+            "valuation_reason": self.VALUATION_REASON,
         }
 
     def found_at(self, entry: Mapping[str, Any], number: int, now: datetime) -> str:
