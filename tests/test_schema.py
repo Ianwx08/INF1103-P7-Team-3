@@ -72,11 +72,19 @@ class TestSchemaValidator(unittest.TestCase):
         data = copy_reply(self.good, report_type="x", overall_confidence="high", prohibited_item=None)
         self.assertGreaterEqual(len(self.validator.validate(data)), 3)
 
-    def test_response_schema_requires_every_key(self):
+    def test_response_schema_requires_every_key(self):                                  # T13
         required = set(RESPONSE_SCHEMA["required"])
         self.assertTrue(set(FIELD_NAMES) <= required)
         self.assertTrue({"colour_options", "prohibited_item", "item_recognised", "location_specific"} <= required)
+        self.assertTrue({"estimated_value_sgd", "sensitive", "value_category", "valuation_reason"} <= required)
+
+    def test_value_assessment_is_always_required(self):                                 # T13 (D5)
+        for report_type in ("found", "lost", "unknown"):
+            data = copy_reply(self.good, report_type=report_type)
+            del data["sensitive"]
+            self.assert_problem(data, "sensitive must be true or false")
 
 
 if __name__ == "__main__":
     unittest.main()
+

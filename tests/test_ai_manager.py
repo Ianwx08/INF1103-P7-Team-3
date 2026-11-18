@@ -73,6 +73,15 @@ class AIContract:
         self.assertIsInstance(found, FoundItem)
         self.assertEqual((found.item_type.text, found.colour.text), ("phone", "black"))
 
+    def test_found_item_carries_the_value_assessment(self):                             # T14
+        found = self.make([SampleReplies.found_reply(None, True)]).analyse("found", ANSWERS)
+        self.assertIsInstance(found, FoundItem)
+        self.assertEqual(found.value_category, "HIGH_VALUE")
+        self.assertIsNone(found.assessment.estimated_value_sgd)
+        lost = self.make([SampleReplies.found_reply(5000)]).analyse("lost", ANSWERS)
+        self.assertIsInstance(lost, LostItem)
+        self.assertFalse(hasattr(lost, "value_category"))
+
     def test_menu_choice_wins_over_ai_report_type(self):
         self.assertEqual(self.make([ai_reply(report_type="found")]).analyse("lost", ANSWERS).report_type, "lost")
 
@@ -133,6 +142,16 @@ class TestGeminiAIManager(unittest.TestCase):
         prompt = client.requests[1]["contents"]
         self.assertIn("- item_colour: dark grey", prompt)
         self.assertIn('"item_type": {"value": "phone"', prompt)
+        self.assertNotIn('"status"', prompt)    # storage keys never sent to Gemini
+
+    def test_follow_up_prompt_asks_to_re_evaluate_the_value_assessment(self):           # T15
+        manager, client, _ = gemini([SampleReplies.found_reply(1234, colour=None),
+                                     SampleReplies.found_reply(1234, colour="dark grey")])
+        first = manager.analyse("found", ANSWERS)
+        manager.analyse("found", {"item_colour": "dark grey"}, first)
+        prompt = client.requests[1]["contents"]
+        self.assertIn('"estimated_value_sgd": 1234', prompt)
+        self.assertIn("the value assessment", prompt)
         self.assertNotIn('"status"', prompt)
 
     def test_api_key_and_client_are_encapsulated(self):

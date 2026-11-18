@@ -53,6 +53,14 @@ class TestShippedSamples(unittest.TestCase):
             self.assertLessEqual(item.occurred_at, NOW, item.description.text)
             self.assertLess((NOW - item.occurred_at).days, 7, item.description.text)
 
+    def test_every_sample_is_assessed_and_four_are_high_value(self):                   # T16
+        self.assertEqual(len(self.items), 24)
+        self.assertTrue(all(item.assessment is not None for item in self.items))
+        high = sorted(item.description.text for item in self.items if item.is_high_value)
+        self.assertEqual(high, ["SIT student card", "black card holder with an EZ-Link card",
+                                "iPhone 16 Pro with black silicone case",
+                                "silver MacBook Air 13-inch with SIT sticker"])
+
     def test_samples_are_unique(self):
         keys = [SampleDataSeeder.key(item) for item in self.items]
         self.assertEqual(len(keys), len(set(keys)))
@@ -82,6 +90,13 @@ class TestSampleDataLoader(unittest.TestCase):
         self.assertTrue(item.unique_info.is_empty())
         self.assertEqual(item.unique_info.confidence, 0.0)
 
+    def test_value_and_sensitive_keys(self):                                            # T16
+        plain, priced, sensitive = self.load([entry(), entry(estimated_value_sgd=1300), entry(sensitive=True)])
+        self.assertEqual((plain.assessment.estimated_value_sgd, plain.value_category), (None, "ORDINARY"))
+        self.assertEqual((priced.assessment.estimated_value_sgd, priced.value_category), (1300, "HIGH_VALUE"))
+        self.assertEqual(sensitive.value_category, "HIGH_VALUE")
+        self.assertEqual(plain.assessment.reason, SampleDataLoader.VALUATION_REASON)
+
     def test_bad_entries_name_the_sample(self):
         cases = [
             ([entry(), {"description": "x"}], "Sample #2 is missing"),
@@ -90,6 +105,10 @@ class TestSampleDataLoader(unittest.TestCase):
             ([entry(found_days_ago=7)], "found_days_ago must be a whole number"),
             ([entry(found_days_ago=True)], "found_days_ago must be a whole number"),
             ([entry(found_time="3pm")], "found_time must look like 15:00"),
+            ([entry(), entry(estimated_value_sgd="1300")], "Sample #2: estimated_value_sgd must be a number or null"),
+            ([entry(estimated_value_sgd=-5)], "estimated_value_sgd must be a number or null"),
+            ([entry(estimated_value_sgd=True)], "estimated_value_sgd must be a number or null"),
+            ([entry(sensitive="yes")], "Sample #1: sensitive must be true or false"),
             (["not an object"], "Sample #1 must be an object"),
             ({"not": "a list"}, "must contain a list"),
         ]
