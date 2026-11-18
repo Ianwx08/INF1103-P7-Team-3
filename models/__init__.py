@@ -13,7 +13,6 @@ Everything is re-exported here, so callers can write `from models import FoundIt
 """
 from models.ai_flags import AIFlags
 from models.constants import DATETIME_FORMAT, FIELD_NAMES
-from models.email_message import EmailMessage
 from models.extracted_field import ExtractedField
 from models.found_item import FoundItem
 from models.item import Item
@@ -34,5 +33,6 @@ __all__ = [
     "LostItem",
     "MatchDecision",
     "StoredItemsOverview",
+    "ValueAssessment",
 
 ]
