@@ -43,11 +43,11 @@ class MatchingService:
 
     def expired(self, items: Sequence[FoundItem], now: datetime | None = None,
                     days: int = ARCHIVE_AFTER_DAYS) -> list[FoundItem]:
-            """Active ordinary items reported more than `days` ago. HIGH_VALUE items are never archived.
-    
-            Items that were never assessed count as ordinary. Uses the report time, not the date found.
-            """
-            moment = now or datetime.now()
-            return [item for item in items
-                    if item.is_active() and not item.is_high_value and item.is_overdue(moment, days)]
-    
+        """Active ordinary items reported more than `days` ago. HIGH_VALUE items are never archived.
+
+        Items that were never assessed count as ordinary. Uses the report time, not the date found.
+        """
+        moment = now or datetime.now()
+        return [item for item in items
+                if item.is_active() and not item.is_high_value and item.is_overdue(moment, days)]
+
